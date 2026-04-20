@@ -1,12 +1,17 @@
+mod config;
+mod rules;
+
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::{Verbosity, InfoLevel};
 use easy_logging::LoggingConfig;
 use log::{Level, trace, debug, info, warn, error};
+
+use config::Config;
 
 #[derive(Parser)]
 #[command(about, disable_help_subcommand = true)]
@@ -40,7 +45,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     };
 
-    let message = format!("{err:#}");
+    let message = format!("Error: {err:#}");
 
     if message.contains('\n') || message.ends_with('.') {
         error!("{message}");
@@ -52,6 +57,10 @@ fn main() -> ExitCode {
 }
 
 fn run(args: &Args) -> Result<()> {
+    let config_path = &args.config;
+    let _config = Config::load(config_path).with_context(|| format!(
+        "failed to load configuration file {config_path:?}"))?;
+
     match &args.command {
         Command::Generate {} => {
             trace!("trace");
@@ -61,5 +70,6 @@ fn run(args: &Args) -> Result<()> {
             error!("error");
         }
     }
+
     Ok(())
 }
