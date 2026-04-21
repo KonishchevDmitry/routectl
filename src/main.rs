@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::{Verbosity, InfoLevel};
 use easy_logging::LoggingConfig;
-use log::{Level, trace, debug, info, warn, error};
+use log::{Level, error};
 
 use config::Config;
 
@@ -67,11 +67,6 @@ fn run(args: &Args) -> Result<()> {
     match &args.command {
         Command::Generate {} => {
             generator::generate(&config.rules)?;
-            trace!("trace");
-            debug!("debug");
-            info!("info");
-            warn!("warn");
-            error!("error");
         }
     }
 

@@ -33,37 +33,24 @@ impl Networks {
         networks.entry(network).or_default().add(source);
     }
 
-    // XXX(konishchev): Drop?
-    // pub fn iter(&self) -> btree_map::Iter<'_, IpNet, IpSource> {
-    //     self.ips.iter()
-    // }
-
-    // XXX(konishchev): HERE
-    pub fn filter(self, excludes: &Networks) {
-        calculate(&self.v4, &excludes.v4);
-        calculate(&self.v6, &excludes.v6);
+    pub fn filter(self, excludes: &Networks) -> Networks {
+        Networks {
+            v4: calculate(&self.v4, &excludes.v4),
+            v6: calculate(&self.v6, &excludes.v6),
+        }
     }
 }
 
-// XXX(konishchev): Drop?
-// impl IntoIterator for Networks {
-//     type Item = (IpNet, IpSource);
-//     type IntoIter = btree_map::IntoIter<IpNet, IpSource>;
+impl<'a> IntoIterator for &'a Networks {
+    type Item = (IpNet, &'a IpSources);
+    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
 
-//     fn into_iter(self) -> Self::IntoIter {
-//         self.ips.into_iter()
-//     }
-// }
-
-// XXX(konishchev): Drop?
-// impl<'a> IntoIterator for &'a Networks {
-//     type Item = (&'a IpNet, &'a IpSource);
-//     type IntoIter = btree_map::Iter<'a, IpNet, IpSource>;
-
-//     fn into_iter(self) -> Self::IntoIter {
-//         self.ips.iter()
-//     }
-// }
+    fn into_iter(self) -> Self::IntoIter {
+        let v4 = self.v4.iter().map(|(&network, sources)| (IpNet::V4(network), sources));
+        let v6 = self.v6.iter().map(|(&network, sources)| (IpNet::V6(network), sources));
+        Box::new(v4.chain(v6))
+    }
+}
 
 fn calculate<N>(networks: &BTreeMap<N, IpSources>, excludes: &BTreeMap<N, IpSources>) -> BTreeMap<N, IpSources>
     where N: IpNetTrait + Display

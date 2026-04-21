@@ -1,4 +1,7 @@
+use std::fmt::Write;
+
 use anyhow::Result;
+use log::{Level, log_enabled, debug};
 
 use crate::ips::Networks;
 use crate::rules::{Rule, Target};
@@ -11,12 +14,23 @@ pub fn generate(rules: &[Rule]) -> Result<()> {
     Ok(())
 }
 
-// XXX(konishchev): HERE
 fn process_rule(rule: &Rule) -> Result<()> {
     let targets = resolve_targets(&rule.targets)?;
     let excludes = resolve_targets(&rule.exclude)?;
 
-    targets.filter(&excludes);
+    let result = targets.filter(&excludes);
+
+    if log_enabled!(Level::Debug) {
+        let mut buf = String::new();
+
+        write!(&mut buf, "Got the following networks:").unwrap();
+        for (network, sources) in &result {
+            write!(&mut buf, "\n* {network} (source: {sources})").unwrap();
+        }
+
+        debug!("{buf}");
+    }
+
     Ok(())
 }
 
