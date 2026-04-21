@@ -13,7 +13,9 @@ ipnet = "2.12.0"
 iprange = "0.6.7"
 itertools = "0.13.0"
 log = "0.4.29"
+reqwest = "0.13.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
 strum = { version = "0.28.0", features = ["derive"] }
+url = "2.5.8"
 validator = { version = "0.20.0", features = ["derive"] }

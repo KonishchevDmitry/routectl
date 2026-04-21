@@ -1,6 +1,7 @@
 mod config;
 mod generator;
 mod ips;
+mod resolvers;
 mod rules;
 mod sources;
 

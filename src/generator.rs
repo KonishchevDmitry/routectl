@@ -4,6 +4,7 @@ use anyhow::Result;
 use log::{Level, log_enabled, debug};
 
 use crate::ips::Networks;
+use crate::resolvers::Resolvers;
 use crate::rules::{Rule, Target};
 use crate::sources::{IpSource, IpSourceRef};
 
@@ -36,12 +37,17 @@ fn process_rule(rule: &Rule) -> Result<()> {
 
 fn resolve_targets(targets: &[Target]) -> Result<Networks> {
     let mut networks = Networks::new();
+    let resolvers = Resolvers::new()?; // FIXME(konishchev): Move out here
 
     for target in targets {
         match target {
             &Target::Network(network) => {
                 let source = IpSourceRef::new(IpSource::Network(network));
                 networks.add(network, source);
+            },
+            Target::List(url) => {
+                // XXX(konishchev): HERE
+                resolvers.lists.fetch(url);
             },
         }
     }
