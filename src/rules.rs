@@ -22,11 +22,8 @@ impl<'de> Deserialize<'de> for Target {
 
         if let Ok(network) = target.parse() {
             return Ok(Target::Network(network));
-        } else if let Ok(address) = target.parse() {
-            return Ok(Target::Network(match address {
-                IpAddr::V4(_) => IpNet::new_assert(address, 32),
-                IpAddr::V6(_) => IpNet::new_assert(address, 128),
-            }));
+        } else if let Ok(address) = target.parse::<IpAddr>() {
+            return Ok(Target::Network(address.into()));
         }
 
         Err(D::Error::custom(format!("invalid target: {target:?}")))

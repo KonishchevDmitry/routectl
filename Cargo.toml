@@ -10,7 +10,10 @@ clap = { version = "4.6.1", features = ["derive"] }
 clap-verbosity-flag = "3.0.4"
 easy-logging = "1.1.0"
 ipnet = "2.12.0"
+iprange = "0.6.7"
+itertools = "0.13.0"
 log = "0.4.29"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
+strum = { version = "0.28.0", features = ["derive"] }
 validator = { version = "0.20.0", features = ["derive"] }

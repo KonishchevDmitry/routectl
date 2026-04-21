@@ -1,5 +1,8 @@
 mod config;
+mod generator;
+mod ips;
 mod rules;
+mod sources;
 
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -58,11 +61,12 @@ fn main() -> ExitCode {
 
 fn run(args: &Args) -> Result<()> {
     let config_path = &args.config;
-    let _config = Config::load(config_path).with_context(|| format!(
+    let config = Config::load(config_path).with_context(|| format!(
         "failed to load configuration file {config_path:?}"))?;
 
     match &args.command {
         Command::Generate {} => {
+            generator::generate(&config.rules)?;
             trace!("trace");
             debug!("debug");
             info!("info");
