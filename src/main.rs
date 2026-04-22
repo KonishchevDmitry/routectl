@@ -1,4 +1,5 @@
 mod config;
+#[macro_use] mod core;
 mod generator;
 mod ips;
 mod resolving;

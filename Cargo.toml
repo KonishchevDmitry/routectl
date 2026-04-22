@@ -1,7 +1,8 @@
 [package]
 name = "routectl"
-description = "TODO" # FIXME(konishchev): Add
 version = "0.1.0"
+description = "TODO" # FIXME(konishchev): Add
+repository = "https://github.com/KonishchevDmitry/routectl"
 edition = "2024"
 
 [dependencies]
@@ -10,15 +11,17 @@ clap = { version = "4.6.1", features = ["derive"] }
 clap-verbosity-flag = "3.0.4"
 easy-logging = "1.1.0"
 futures = "0.3.31"
+futures-util = "0.3.32"
 ipnet = "2.12.0"
 iprange = "0.6.7"
 itertools = "0.13.0"
 log = "0.4.29"
-reqwest = "0.13.2"
+reqwest = { version = "0.13.2", features = ["stream"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
 strum = { version = "0.28.0", features = ["derive"] }
 # FIXME(konishchev): Check features
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
+tokio-util = "0.7.18"
 url = "2.5.8"
 validator = { version = "0.20.0", features = ["derive"] }

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
+use std::net::IpAddr;
 use std::string::ToString;
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
@@ -49,6 +50,16 @@ impl<'a> IntoIterator for &'a Networks {
         let v4 = self.v4.iter().map(|(&network, sources)| (IpNet::V4(network), sources));
         let v6 = self.v6.iter().map(|(&network, sources)| (IpNet::V6(network), sources));
         Box::new(v4.chain(v6))
+    }
+}
+
+pub fn parse_network(network: &str) -> Option<IpNet> {
+    if let Ok(network) = network.parse() {
+        Some(network)
+    } else if let Ok(address) = network.parse::<IpAddr>() {
+        Some(address.into())
+    } else{
+        None
     }
 }
 

@@ -1,6 +1,5 @@
 mod lists;
 
-use std::net::IpAddr;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
@@ -12,7 +11,7 @@ use tokio::sync::Semaphore;
 use validator::Validate;
 use url::Url;
 
-use crate::ips::Networks;
+use crate::ips::{self, Networks};
 use crate::sources::{IpSource, IpSourceRef};
 
 use lists::Lists;
@@ -28,10 +27,8 @@ impl<'de> Deserialize<'de> for Target {
     {
         let target: String = Deserialize::deserialize(deserializer)?;
 
-        if let Ok(network) = target.parse() {
-            return Ok(Target::Network(network));
-        } else if let Ok(address) = target.parse::<IpAddr>() {
-            return Ok(Target::Network(address.into()));
+        if let Some(network) = ips::parse_network(&target) {
+            return Ok(Target::Network(network))
         } else if let Ok(url) = target.parse::<Url>() && (url.scheme() == "https" || url.scheme() == "http") {
             return Ok(Target::List(url));
         }
@@ -77,7 +74,6 @@ impl Resolver {
         Ok(networks.into_inner().unwrap())
     }
 
-    // XXX(konishchev): HERE
     async fn resolve_target(&self, target: &Target, result: &Mutex<Networks>) -> Result<()> {
         match target {
             &Target::Network(network) => {
@@ -86,7 +82,17 @@ impl Resolver {
             },
             Target::List(url) => {
                 let _permit = self.semaphore.acquire().await.unwrap();
-                self.lists.fetch(url).await?;
+
+                let networks = self.lists.fetch(url).await
+                    .with_context(|| format!("fetch {url}"))?;
+
+                let mut result = result.lock().unwrap();
+
+                for network in networks {
+                    // XXX(konishchev): With URL
+                    let source = IpSourceRef::new(IpSource::Network(network));
+                    result.add(network, source);
+                }
             },
         }
         Ok(())

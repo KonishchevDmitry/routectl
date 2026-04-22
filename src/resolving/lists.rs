@@ -1,9 +1,15 @@
-use std::error::Error;
+use std::error;
+use std::io::{self, ErrorKind};
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use futures_util::StreamExt;
 use ipnet::IpNet;
 use reqwest::{Client, ClientBuilder};
+use tokio::io::AsyncBufReadExt;
+use tokio_util::io::StreamReader;
 use url::Url;
+
+use crate::ips;
 
 pub struct Lists {
     client: Client,
@@ -11,7 +17,6 @@ pub struct Lists {
 
 impl Lists {
     pub fn new() -> Result<Self> {
-        // FIXME(konishchev): Add repository
         let user_agent = format!("{name} ({homepage})",
             name=env!("CARGO_PKG_NAME"), homepage=env!("CARGO_PKG_REPOSITORY"));
 
@@ -22,25 +27,46 @@ impl Lists {
         Ok(Self { client })
     }
 
-    // XXX(konishchev): HERE
     pub async fn fetch(&self, url: &Url) -> Result<Vec<IpNet>> {
-        // self.client.get(url).send().await?.text().await
-        // if !response.status().is_success() {
-        //     return Err!("Server returned an error: {}", response.status());
-        // }
-        Ok(Vec::new())
+        let response = self.client.get(url.to_owned()).send().await.map_err(humanize_reqwest_error)?;
+        if !response.status().is_success() {
+            return Err!("server returned an error: {}", response.status());
+        }
+
+        let mut lines = StreamReader::new(response.bytes_stream().map(|result| {
+            result.map_err(|e| io::Error::new(ErrorKind::Other, humanize_reqwest_error(e)))
+        })).lines();
+
+        let mut networks = Vec::new();
+
+        while let Some(line) = lines.next_line().await? {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            let network = ips::parse_network(line).ok_or_else(|| anyhow!(
+                "got an invalid network: {line:?}"))?;
+
+            networks.push(network);
+        }
+
+        if networks.is_empty() {
+            return Err!("the list is empty");
+        }
+
+        Ok(networks)
     }
 }
 
-// XXX(konishchev): HERE
-pub fn humanize_reqwest_error(err: reqwest::Error) -> String {
+fn humanize_reqwest_error(err: reqwest::Error) -> anyhow::Error {
     let err = err.without_url();
 
     // reqwest/hyper errors hide all details, so extract the underlying error
-    let mut err: &dyn Error = &err;
+    let mut err: &dyn error::Error = &err;
     while let Some(source) = err.source() {
         err = source;
     }
 
-    err.to_string()
+    anyhow!("{err}")
 }
