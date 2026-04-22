@@ -5,6 +5,7 @@ use futures::stream::{self, StreamExt, TryStreamExt};
 use log::{Level, log_enabled, debug};
 
 use crate::config::Config;
+use crate::ips::HumanNetwork;
 use crate::resolving::Resolver;
 use crate::rules::Rule;
 
@@ -38,7 +39,7 @@ async fn process_rule(resolver: &Resolver, rule: &Rule) -> Result<()> {
 
         write!(&mut buf, "Got the following networks:").unwrap();
         for (network, sources) in &result {
-            write!(&mut buf, "\n* {network} (source: {sources})").unwrap();
+            write!(&mut buf, "\n* {} (source: {sources})", HumanNetwork(network)).unwrap();
         }
 
         debug!("{buf}");

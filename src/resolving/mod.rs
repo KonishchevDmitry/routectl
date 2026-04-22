@@ -12,7 +12,7 @@ use validator::Validate;
 use url::Url;
 
 use crate::ips::{self, Networks};
-use crate::sources::{IpSource, IpSourceRef};
+use crate::sources::{IpSource, IpSourceType, ListIpSource};
 
 use lists::Lists;
 
@@ -77,21 +77,25 @@ impl Resolver {
     async fn resolve_target(&self, target: &Target, result: &Mutex<Networks>) -> Result<()> {
         match target {
             &Target::Network(network) => {
-                let source = IpSourceRef::new(IpSource::Network(network));
+                let source = IpSource::new(IpSourceType::Network(network), None);
                 result.lock().unwrap().add(network, source);
             },
+
             Target::List(url) => {
-                let _permit = self.semaphore.acquire().await.unwrap();
+                let networks = {
+                    let _permit = self.semaphore.acquire().await.unwrap();
+                    self.lists.fetch(url).await.with_context(|| format!("fetch {url}"))?
+                };
 
-                let networks = self.lists.fetch(url).await
-                    .with_context(|| format!("fetch {url}"))?;
+                let list_source = ListIpSource::new(url);
 
-                let mut result = result.lock().unwrap();
+                {
+                    let mut result = result.lock().unwrap();
 
-                for network in networks {
-                    // XXX(konishchev): With URL
-                    let source = IpSourceRef::new(IpSource::Network(network));
-                    result.add(network, source);
+                    for network in networks {
+                        let source = IpSource::new(IpSourceType::Network(network), Some(list_source.clone()));
+                        result.add(network, source);
+                    }
                 }
             },
         }

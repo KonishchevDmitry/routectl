@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fmt::Display;
+use std::fmt::{self, Display, Formatter};
 use std::net::IpAddr;
 use std::string::ToString;
 
@@ -8,7 +8,7 @@ use iprange::{IpNet as IpNetTrait, IpRange};
 use itertools::Itertools;
 use log::warn;
 
-use crate::sources::{IpSourceRef, IpSources};
+use crate::sources::{IpSource, IpSources};
 
 pub struct Networks {
     v4: BTreeMap<Ipv4Net, IpSources>,
@@ -23,14 +23,14 @@ impl Networks {
         }
     }
 
-    pub fn add(&mut self, network: IpNet, source: IpSourceRef) {
+    pub fn add(&mut self, network: IpNet, source: IpSource) {
         match network {
             IpNet::V4(network) => Self::add_inner(&mut self.v4, network, source),
             IpNet::V6(network) => Self::add_inner(&mut self.v6, network, source),
         }
     }
 
-    fn add_inner<N: IpNetTrait>(networks: &mut BTreeMap<N, IpSources>, network: N, source: IpSourceRef) {
+    fn add_inner<N: IpNetTrait>(networks: &mut BTreeMap<N, IpSources>, network: N, source: IpSource) {
         networks.entry(network).or_default().add(source);
     }
 
@@ -63,6 +63,18 @@ pub fn parse_network(network: &str) -> Option<IpNet> {
     }
 }
 
+pub struct HumanNetwork(pub IpNet);
+
+impl Display for HumanNetwork {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.0.prefix_len() == self.0.max_prefix_len() {
+            write!(f, "{}", self.0.addr())
+        } else {
+            write!(f, "{}", self.0)
+        }
+    }
+}
+
 fn calculate<N>(networks: &BTreeMap<N, IpSources>, excludes: &BTreeMap<N, IpSources>) -> BTreeMap<N, IpSources>
     where N: IpNetTrait + Display
 {
@@ -83,6 +95,7 @@ fn calculate<N>(networks: &BTreeMap<N, IpSources>, excludes: &BTreeMap<N, IpSour
 
             warn!(
                 "Excluding {} (source: {exclude_sources}) from {network} (source: {sources}).",
+                // FIXME(konishchev): HumanNetwork
                 intersection.iter().map(|network| network.to_string()).join(", "),
             );
 
