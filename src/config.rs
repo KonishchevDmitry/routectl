@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
 
@@ -14,7 +15,7 @@ pub struct Config {
     pub resolver: ResolverConfig,
     // FIXME(konishchev): #[validate(length(min = 1))]
     #[validate(nested)]
-    pub rules: Vec<Rule>,
+    pub rules: BTreeMap<String, Rule>,
 }
 
 impl Config {

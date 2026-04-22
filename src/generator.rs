@@ -1,28 +1,35 @@
 use std::fmt::Write;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use futures::stream::{self, StreamExt, TryStreamExt};
 use log::{Level, log_enabled, debug};
 
 use crate::config::Config;
 use crate::resolving::Resolver;
 use crate::rules::Rule;
 
-// XXX(konishchev): HERE
 #[tokio::main]
 pub async fn generate(config: &Config) -> Result<()> {
     let resolver = Resolver::new(&config.resolver)?;
 
-    for rule in &config.rules {
-        process_rule(&resolver, rule).await?;
-    }
+    stream::iter(&config.rules)
+        .map(|(name, rule)| async {
+            let name = name.clone();
+            process_rule(&resolver, rule).await.with_context(|| format!(
+                "failed to process rule {name:?}"))
+        })
+        .buffer_unordered(usize::MAX)
+        .try_collect::<Vec<_>>()
+        .await?;
 
     Ok(())
 }
 
-// XXX(konishchev): HERE
 async fn process_rule(resolver: &Resolver, rule: &Rule) -> Result<()> {
-    let targets = resolver.resolve(&rule.targets).await?;
-    let excludes = resolver.resolve(&rule.exclude).await?;
+    let (targets, excludes) = tokio::try_join!(
+        resolver.resolve(&rule.targets),
+        resolver.resolve(&rule.exclude),
+    )?;
 
     let result = targets.filter(&excludes);
 

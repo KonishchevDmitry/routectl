@@ -8,6 +8,7 @@ use futures::stream::{self, StreamExt};
 use ipnet::IpNet;
 use serde::Deserialize;
 use serde::de::{Deserializer, Error};
+use tokio::sync::Semaphore;
 use validator::Validate;
 use url::Url;
 
@@ -48,6 +49,7 @@ pub struct ResolverConfig {
 pub struct Resolver {
     lists: Lists,
     concurrency: usize,
+    semaphore: Semaphore,
 }
 
 impl Resolver {
@@ -55,6 +57,7 @@ impl Resolver {
         Ok(Self {
             lists: Lists::new().context("failed to create lists resolver")?,
             concurrency: config.concurrency,
+            semaphore: Semaphore::new(config.concurrency),
         })
     }
 
@@ -82,6 +85,7 @@ impl Resolver {
                 result.lock().unwrap().add(network, source);
             },
             Target::List(url) => {
+                let _permit = self.semaphore.acquire().await.unwrap();
                 self.lists.fetch(url).await?;
             },
         }
