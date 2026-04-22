@@ -1,7 +1,7 @@
 mod config;
 mod generator;
 mod ips;
-mod resolvers;
+mod resolving;
 mod rules;
 mod sources;
 
@@ -49,7 +49,8 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     };
 
-    let message = format!("Error: {err:#}");
+    // FIXME(konishchev): title
+    let message = format!("{err:#}");
 
     if message.contains('\n') || message.ends_with('.') {
         error!("{message}");
@@ -67,7 +68,7 @@ fn run(args: &Args) -> Result<()> {
 
     match &args.command {
         Command::Generate {} => {
-            generator::generate(&config.rules)?;
+            generator::generate(&config)?;
         }
     }
 

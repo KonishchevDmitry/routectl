@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use ipnet::IpNet;
 
-
 #[derive(strum::Display)]
 pub enum IpSource {
     #[strum(to_string = "{0}")]

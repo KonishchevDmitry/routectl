@@ -3,21 +3,26 @@ use std::fmt::Write;
 use anyhow::Result;
 use log::{Level, log_enabled, debug};
 
-use crate::ips::Networks;
-use crate::resolvers::Resolvers;
-use crate::rules::{Rule, Target};
-use crate::sources::{IpSource, IpSourceRef};
+use crate::config::Config;
+use crate::resolving::Resolver;
+use crate::rules::Rule;
 
-pub fn generate(rules: &[Rule]) -> Result<()> {
-    for rule in rules {
-        process_rule(rule)?;
+// XXX(konishchev): HERE
+#[tokio::main]
+pub async fn generate(config: &Config) -> Result<()> {
+    let resolver = Resolver::new(&config.resolver)?;
+
+    for rule in &config.rules {
+        process_rule(&resolver, rule).await?;
     }
+
     Ok(())
 }
 
-fn process_rule(rule: &Rule) -> Result<()> {
-    let targets = resolve_targets(&rule.targets)?;
-    let excludes = resolve_targets(&rule.exclude)?;
+// XXX(konishchev): HERE
+async fn process_rule(resolver: &Resolver, rule: &Rule) -> Result<()> {
+    let targets = resolver.resolve(&rule.targets).await?;
+    let excludes = resolver.resolve(&rule.exclude).await?;
 
     let result = targets.filter(&excludes);
 
@@ -33,24 +38,4 @@ fn process_rule(rule: &Rule) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn resolve_targets(targets: &[Target]) -> Result<Networks> {
-    let mut networks = Networks::new();
-    let resolvers = Resolvers::new()?; // FIXME(konishchev): Move out here
-
-    for target in targets {
-        match target {
-            &Target::Network(network) => {
-                let source = IpSourceRef::new(IpSource::Network(network));
-                networks.add(network, source);
-            },
-            Target::List(url) => {
-                // XXX(konishchev): HERE
-                resolvers.lists.fetch(url);
-            },
-        }
-    }
-
-    Ok(networks)
 }

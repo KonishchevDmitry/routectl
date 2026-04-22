@@ -1,3 +1,6 @@
+resolver:
+  concurrency: 2
+
 rules:
   - targets:
     - 1.1.1.1
