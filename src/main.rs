@@ -5,6 +5,7 @@ mod ips;
 mod resolving;
 mod rules;
 mod sources;
+mod util;
 
 use std::io::{self, Write};
 use std::path::PathBuf;

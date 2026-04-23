@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::{self, Display, Formatter};
 use std::net::IpAddr;
-use std::string::ToString;
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::{IpNet as IpNetTrait, IpRange};
@@ -65,6 +64,12 @@ pub fn parse_network(network: &str) -> Option<IpNet> {
 
 pub struct HumanNetwork(pub IpNet);
 
+impl<N: Into<IpNet>> From<N> for HumanNetwork {
+    fn from(network: N) -> Self {
+        HumanNetwork(network.into())
+    }
+}
+
 impl Display for HumanNetwork {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if self.0.prefix_len() == self.0.max_prefix_len() {
@@ -76,7 +81,7 @@ impl Display for HumanNetwork {
 }
 
 fn calculate<N>(networks: &BTreeMap<N, IpSources>, excludes: &BTreeMap<N, IpSources>) -> BTreeMap<N, IpSources>
-    where N: IpNetTrait + Display
+    where N: IpNetTrait + Into<IpNet>
 {
     let mut result: BTreeMap<N, IpSources> = BTreeMap::new();
 
@@ -94,9 +99,8 @@ fn calculate<N>(networks: &BTreeMap<N, IpSources>, excludes: &BTreeMap<N, IpSour
             }
 
             warn!(
-                "Excluding {} (source: {exclude_sources}) from {network} (source: {sources}).",
-                // FIXME(konishchev): HumanNetwork
-                intersection.iter().map(|network| network.to_string()).join(", "),
+                "Excluding {} (source: {exclude_sources}) from {} (source: {sources}).",
+                intersection.iter().map(HumanNetwork::from).join(", "), HumanNetwork::from(network)
             );
 
             range.remove(exclude_network);

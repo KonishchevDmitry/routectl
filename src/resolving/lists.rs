@@ -1,15 +1,18 @@
 use std::error;
 use std::io::{self, ErrorKind};
+use std::time::Instant;
 
 use anyhow::{Result, anyhow};
 use futures_util::StreamExt;
 use ipnet::IpNet;
+use log::debug;
 use reqwest::{Client, ClientBuilder};
 use tokio::io::AsyncBufReadExt;
 use tokio_util::io::StreamReader;
 use url::Url;
 
 use crate::ips;
+use crate::util;
 
 pub struct Lists {
     client: Client,
@@ -28,6 +31,9 @@ impl Lists {
     }
 
     pub async fn fetch(&self, url: &Url) -> Result<Vec<IpNet>> {
+        debug!("Fetching {url}...");
+        let start_time = Instant::now();
+
         let response = self.client.get(url.to_owned()).send().await.map_err(humanize_reqwest_error)?;
         if !response.status().is_success() {
             return Err!("server returned an error: {}", response.status());
@@ -50,6 +56,9 @@ impl Lists {
 
             networks.push(network);
         }
+
+        debug!("Got {} networks from {url} in {}.", networks.len(),
+            util::format_duration(start_time.elapsed()));
 
         if networks.is_empty() {
             return Err!("the list is empty");
