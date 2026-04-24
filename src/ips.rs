@@ -9,6 +9,42 @@ use log::warn;
 
 use crate::sources::{IpSource, IpSources};
 
+// https://en.wikipedia.org/wiki/List_of_reserved_IP_addresses
+static RESERVED_NETWORKS: &'static [&'static str] = &[
+    "0.0.0.0/8",       // [Software] This host on this network
+    "10.0.0.0/8",      // [Private network] Used for local communications within a private network
+    "100.64.0.0/10",   // [Private network] Shared address space for communications between a service provider and its subscribers when using a carrier-grade NAT
+    "127.0.0.0/8",     // [Host] Loopback addresses
+    "169.254.0.0/16",  // [Link] Used for link-local addresses between two hosts on a single link when no IP address is otherwise specified
+    "172.16.0.0/12",   // [Private network] Used for local communications within a private network
+    "192.0.0.0/24",    // IETF Protocol Assignments
+    "192.0.2.0/24",    // [Documentation] Assigned as TEST-NET-1, documentation and examples
+    "192.88.99.0/24",  // Formerly used for IPv6 to IPv4 relay
+    "192.168.0.0/16",  // [Private network] Used for local communications within a private network
+    "198.18.0.0/15",   // [Private network] Used for benchmark testing of inter-network communications between two separate subnets
+    "198.51.100.0/24", // [Documentation] Assigned as TEST-NET-2, documentation and examples
+    "203.0.113.0/24",  // [Documentation] Assigned as TEST-NET-3, documentation and examples
+    "224.0.0.0/4",     // Multicast
+    "240.0.0.0/4",     // Reserved for future use
+    "255.255.255.255", // Limited Broadcast
+
+    "::",             // [Software] Unspecified address
+    "::1",            // [Host] Loopback address
+    "::ffff:0:0/96",  // [Software] IPv4-mapped addresses
+    "64:ff9b::/96",   // NAT64
+    "64:ff9b:1::/48", // NAT64
+    "100::/64",       // [Routing] Discard prefix
+    "2001::/32",      // Teredo tunneling (non-static IP)
+    "2001:20::/28",   // [Software] ORCHIDv2
+    "2001:db8::/32",  // [Documentation] Addresses used in documentation and example source code
+    "2002::/16",      // Deprecated 6to4 addressing scheme
+    "3fff::/20",      // [Documentation] Addresses used in documentation and example source code
+    "5f00::/16",      // [Routing] IPv6 Segment Routing
+    "fc00::/7",       // [Private network] Unique local addresses
+    "fe80::/64",      // [Link] Link-local addresses
+    "ff00::/8",       // Multicast
+];
+
 pub struct Networks {
     v4: BTreeMap<Ipv4Net, IpSources>,
     v6: BTreeMap<Ipv6Net, IpSources>,
