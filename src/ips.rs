@@ -2,12 +2,13 @@ use std::collections::BTreeMap;
 use std::fmt::{self, Display, Formatter};
 use std::net::IpAddr;
 
+use anyhow::{Result, anyhow};
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::{IpNet as IpNetTrait, IpRange};
 use itertools::Itertools;
 use log::warn;
 
-use crate::sources::{IpSource, IpSources};
+use crate::sources::{IpSource, IpSources, IpSourceType, IpSourceList, IpSourceListRef};
 
 // https://en.wikipedia.org/wiki/List_of_reserved_IP_addresses
 static RESERVED_NETWORKS: &'static [&'static str] = &[
@@ -93,9 +94,24 @@ pub fn parse_network(network: &str) -> Option<IpNet> {
         Some(network)
     } else if let Ok(address) = network.parse::<IpAddr>() {
         Some(address.into())
-    } else{
+    } else {
         None
     }
+}
+
+pub fn reserved_networks() -> Result<Networks> {
+    let mut networks = Networks::new();
+    let source_list = IpSourceListRef::new(IpSourceList::Special("reserved"));
+
+    for network in RESERVED_NETWORKS {
+        let network = parse_network(network).ok_or_else(|| anyhow!(
+            "invalid network: {network:?}"))?;
+
+        let source = IpSource::new(IpSourceType::Network(network), source_list.clone());
+        networks.add(network, source);
+    }
+
+    Ok(networks)
 }
 
 pub struct HumanNetwork(pub IpNet);
@@ -116,6 +132,7 @@ impl Display for HumanNetwork {
     }
 }
 
+// XXX(konishchev): Rule prefix?
 fn calculate<N>(networks: &BTreeMap<N, IpSources>, excludes: &BTreeMap<N, IpSources>) -> BTreeMap<N, IpSources>
     where N: IpNetTrait + Into<IpNet>
 {

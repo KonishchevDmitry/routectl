@@ -9,19 +9,26 @@ use crate::ips::HumanNetwork;
 #[derive(Clone)]
 pub struct IpSource {
     type_: IpSourceType,
-    list: Option<ListIpSourceRef>,
+    list: IpSourceListRef,
 }
 
 impl IpSource {
-    pub fn new(type_: IpSourceType, list: Option<ListIpSourceRef>) -> IpSource {
+    pub fn new(type_: IpSourceType, list: IpSourceListRef) -> IpSource {
         IpSource { type_, list }
     }
 }
 
 impl Display for IpSource {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if let Some(list) = self.list.as_ref() {
-            write!(f, "{}#", list.url)?;
+        match self.list.as_ref() {
+            IpSourceList::Rule(url) => {
+                if let Some(url) = url {
+                    write!(f, "{url}#")?;
+                }
+            },
+            IpSourceList::Special(name) => {
+                write!(f, "{name}:")?;
+            },
         }
         write!(f, "{}", self.type_)
     }
@@ -35,24 +42,17 @@ pub enum IpSourceType {
 impl Display for IpSourceType {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            &IpSourceType::Network(network) => write!(f, "{}", HumanNetwork(network))
+            &IpSourceType::Network(network) => write!(f, "{}", HumanNetwork(network)),
         }
     }
 }
 
-pub struct ListIpSource {
-    url: Url,
+pub enum IpSourceList {
+    Rule(Option<Url>),
+    Special(&'static str),
 }
 
-pub type ListIpSourceRef = Arc<ListIpSource>;
-
-impl ListIpSource {
-    pub fn new(url: &Url) -> ListIpSourceRef {
-        ListIpSourceRef::new(ListIpSource {
-            url: url.to_owned(),
-        })
-    }
-}
+pub type IpSourceListRef = Arc<IpSourceList>;
 
 #[derive(Default)]
 pub struct IpSources {

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use serde::Deserialize;
-use validator::Validate;
+use validator::{Validate, ValidationError};
 
 use crate::resolving::ResolverConfig;
 use crate::rules::Rule;
@@ -13,8 +13,7 @@ use crate::rules::Rule;
 pub struct Config {
     #[validate(nested)]
     pub resolver: ResolverConfig,
-    // FIXME(konishchev): #[validate(length(min = 1))]
-    #[validate(nested)]
+    #[validate(length(min = 1), custom(function = "validate_rule_names"), nested)]
     pub rules: BTreeMap<String, Rule>,
 }
 
@@ -27,4 +26,11 @@ impl Config {
 
         Ok(config)
     }
+}
+
+fn validate_rule_names(rules: &BTreeMap<String, Rule>) -> Result<(), ValidationError> {
+    for name in rules.keys() {
+        Rule::validate_name(name)?;
+    }
+    Ok(())
 }

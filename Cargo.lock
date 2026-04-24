@@ -1270,6 +1270,7 @@ dependencies = [
  "iprange",
  "itertools",
  "log",
+ "regex",
  "reqwest",
  "serde",
  "serde_yaml",
