@@ -32,7 +32,7 @@ async fn process_rule(name: &str, rule: &Rule, resolver: &Resolver) -> Result<()
         resolver.resolve(name, &rule.exclude),
     )?;
 
-    let result = targets.filter(&excludes);
+    let result = targets.filter(name, &excludes);
 
     if log_enabled!(Level::Debug) {
         let mut buf = String::new();
