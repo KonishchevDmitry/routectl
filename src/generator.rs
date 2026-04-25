@@ -16,7 +16,7 @@ pub async fn generate(config: &Config) -> Result<()> {
     stream::iter(&config.rules)
         .map(|(name, rule)| async {
             let name = name.clone();
-            process_rule(&resolver, rule).await.with_context(|| format!(
+            process_rule(&name, rule, &resolver).await.with_context(|| format!(
                 "failed to process rule {name:?}"))
         })
         .buffer_unordered(usize::MAX)
@@ -26,10 +26,10 @@ pub async fn generate(config: &Config) -> Result<()> {
     Ok(())
 }
 
-async fn process_rule(resolver: &Resolver, rule: &Rule) -> Result<()> {
+async fn process_rule(name: &str, rule: &Rule, resolver: &Resolver) -> Result<()> {
     let (targets, excludes) = tokio::try_join!(
-        resolver.resolve(&rule.targets),
-        resolver.resolve(&rule.exclude),
+        resolver.resolve(name, &rule.targets),
+        resolver.resolve(name, &rule.exclude),
     )?;
 
     let result = targets.filter(&excludes);
@@ -37,7 +37,7 @@ async fn process_rule(resolver: &Resolver, rule: &Rule) -> Result<()> {
     if log_enabled!(Level::Debug) {
         let mut buf = String::new();
 
-        write!(&mut buf, "Got the following networks:").unwrap();
+        write!(&mut buf, "[{name}] Got the following networks:").unwrap();
         for (network, sources) in &result {
             write!(&mut buf, "\n* {} (source: {sources})", HumanNetwork(network)).unwrap();
         }

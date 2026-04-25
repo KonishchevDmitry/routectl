@@ -29,6 +29,9 @@ static RESERVED_NETWORKS: &'static [&'static str] = &[
     "240.0.0.0/4",     // Reserved for future use
     "255.255.255.255", // Limited Broadcast
 
+    // XXX(konishchev): Test
+    "91.0.0.0/8",
+
     "::",             // [Software] Unspecified address
     "::1",            // [Host] Loopback address
     "::ffff:0:0/96",  // [Software] IPv4-mapped addresses
@@ -47,6 +50,8 @@ static RESERVED_NETWORKS: &'static [&'static str] = &[
 ];
 
 pub struct Networks {
+    // We might pack IPv4 into IPv6 using IPv4-mapped addresses and don't manage these split IP sets, but not sure that
+    // it's good idea in terms of code readability.
     v4: BTreeMap<Ipv4Net, IpSources>,
     v6: BTreeMap<Ipv6Net, IpSources>,
 }
@@ -114,6 +119,14 @@ pub fn reserved_networks() -> Result<Networks> {
     Ok(networks)
 }
 
+// XXX(konishchev): HERE
+pub fn filter(rule: &str, network: IpNet, source: &IpSource, excludes: &Networks) -> Box<dyn Iterator<Item=IpNet>> {
+    match network {
+        IpNet::V4(network) => Box::new(filter_inner(rule, network, source, &excludes.v4).collect_vec().into_iter()),
+        IpNet::V6(network) => Box::new(filter_inner(rule, network, source, &excludes.v6).collect_vec().into_iter()),
+    }
+}
+
 pub struct HumanNetwork(pub IpNet);
 
 impl<N: Into<IpNet>> From<N> for HumanNetwork {
@@ -132,7 +145,49 @@ impl Display for HumanNetwork {
     }
 }
 
-// XXX(konishchev): Rule prefix?
+// XXX(konishchev): HERE
+fn filter_inner<Net, NetSource>(context: &str, network: Net, sources: NetSource, excludes: &BTreeMap<Net, IpSources>) -> impl Iterator<Item=IpNet>
+    where
+        Net: IpNetTrait + Into<IpNet>,
+        NetSource: Display,
+{
+    let mut range = IpRange::new();
+    range.add(network);
+
+    for (&exclude_network, exclude_sources) in excludes {
+        let mut exclude_range = IpRange::new();
+        exclude_range.add(exclude_network);
+
+        let intersection = range.intersect(&exclude_range);
+        if intersection.is_empty() {
+            continue;
+        }
+
+        // warn!(
+        //     "[{rule}] Excluding {} (source: {exclude_sources}) from {} (source: {sources}).",
+        //     intersection.iter().map(HumanNetwork::from).join(", "), HumanNetwork::from(network)
+        // );
+        let all: Vec<IpNet> = intersection.iter().map(Into::into).collect_vec();
+        if all == vec![network.into()] {
+            warn!(
+                "[{context}] Excluding {} (source: {sources}; exclude: {exclude_sources}).",
+                HumanNetwork::from(network)
+            );
+        } else {
+            warn!(
+                "[{context}] Excluding {} from {} (source: {sources}; exclude: {exclude_sources}).",
+                intersection.iter().map(HumanNetwork::from).join(", "), HumanNetwork::from(network)
+            );
+        }
+
+        range.remove(exclude_network);
+    }
+
+    // XXX(konishchev): Rewrite
+    range.iter().map(Into::into).collect_vec().into_iter()
+}
+
+// XXX(konishchev): Rewrite
 fn calculate<N>(networks: &BTreeMap<N, IpSources>, excludes: &BTreeMap<N, IpSources>) -> BTreeMap<N, IpSources>
     where N: IpNetTrait + Into<IpNet>
 {

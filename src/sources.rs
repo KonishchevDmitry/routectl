@@ -25,12 +25,12 @@ impl Display for IpSource {
                 if let Some(url) = url {
                     write!(f, "{url}#")?;
                 }
+                write!(f, "{}", self.type_)
             },
             IpSourceList::Special(name) => {
-                write!(f, "{name}:")?;
+                write!(f, "{name}[{}]", self.type_)
             },
         }
-        write!(f, "{}", self.type_)
     }
 }
 

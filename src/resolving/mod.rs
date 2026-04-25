@@ -57,7 +57,6 @@ pub struct Resolver {
     semaphore: Semaphore,
 
     lists: Lists,
-    // XXX(konishchev): Apply
     special_networks: Networks,
 }
 
@@ -76,12 +75,12 @@ impl Resolver {
         })
     }
 
-    pub async fn resolve(&self, targets: &[Target]) -> Result<Networks> {
+    pub async fn resolve(&self, context: &str, targets: &[Target]) -> Result<Networks> {
         let networks = Mutex::new(Networks::new());
 
         {
             let mut stream = stream::iter(targets)
-                .map(|target| self.resolve_target(target, &networks))
+                .map(|target| self.resolve_target(context, target, &networks))
                 .buffer_unordered(self.concurrency);
 
             while let Some(result) = stream.next().await {
@@ -92,28 +91,27 @@ impl Resolver {
         Ok(networks.into_inner().unwrap())
     }
 
-    async fn resolve_target(&self, target: &Target, result: &Mutex<Networks>) -> Result<()> {
+    async fn resolve_target(&self, context: &str, target: &Target, result: &Mutex<Networks>) -> Result<()> {
         match target {
             &Target::Network(network) => {
+                let source_type = IpSourceType::Network(network);
                 let source_list = IpSourceListRef::new(IpSourceList::Rule(None));
-                let source = IpSource::new(IpSourceType::Network(network), source_list);
+                let source = IpSource::new(source_type, source_list);
                 result.lock().unwrap().add(network, source);
             },
 
             Target::List(url) => {
-                let networks = {
+                let list_networks = {
                     let _permit = self.semaphore.acquire().await.unwrap();
                     self.lists.fetch(url).await.with_context(|| format!("fetch {url}"))?
                 };
 
                 let source_list = IpSourceListRef::new(IpSourceList::Rule(Some(url.to_owned())));
 
-                {
-                    let mut result = result.lock().unwrap();
-
-                    for network in networks {
-                        let source = IpSource::new(IpSourceType::Network(network), source_list.clone());
-                        result.add(network, source);
+                for list_network in list_networks {
+                    let source = IpSource::new(IpSourceType::Network(list_network), source_list.clone());
+                    for network in ips::filter(context, list_network, &source, &self.special_networks) {
+                        result.lock().unwrap().add(network, source.clone());
                     }
                 }
             },
