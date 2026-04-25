@@ -6,13 +6,17 @@ use anyhow::Result;
 use serde::Deserialize;
 use validator::{Validate, ValidationError};
 
+use crate::ips::IpStack;
 use crate::resolving::ResolverConfig;
 use crate::rules::Rule;
 
 #[derive(Deserialize, Validate)]
 pub struct Config {
+    pub ip_stack: IpStack,
+
     #[validate(nested)]
     pub resolver: ResolverConfig,
+
     #[validate(length(min = 1), custom(function = "validate_rule_names"), nested)]
     pub rules: BTreeMap<String, Rule>,
 }

@@ -11,7 +11,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio_util::io::StreamReader;
 use url::Url;
 
-use crate::ips;
+use crate::ips::{self, IpStack};
 use crate::util;
 
 pub struct Lists {
@@ -30,8 +30,8 @@ impl Lists {
         Ok(Self { client })
     }
 
-    pub async fn fetch(&self, url: &Url) -> Result<Vec<IpNet>> {
-        debug!("Fetching {url}...");
+    pub async fn fetch(&self, url: &Url, ip_stack: IpStack) -> Result<Vec<IpNet>> {
+        debug!("Fetching {url} ({ip_stack})...");
         let start_time = Instant::now();
 
         let response = self.client.get(url.to_owned()).send().await.map_err(humanize_reqwest_error)?;
@@ -43,6 +43,7 @@ impl Lists {
             result.map_err(|e| io::Error::new(ErrorKind::Other, humanize_reqwest_error(e)))
         })).lines();
 
+        let mut is_empty = true;
         let mut networks = Vec::new();
 
         while let Some(line) = lines.next_line().await? {
@@ -54,14 +55,19 @@ impl Lists {
             let network = ips::parse_network(line).ok_or_else(|| anyhow!(
                 "got an invalid network: {line:?}"))?;
 
-            networks.push(network);
+            is_empty = false;
+            if ip_stack.matches(network) {
+                networks.push(network);
+            }
         }
 
         debug!("Got {} networks from {url} in {}.", networks.len(),
             util::format_duration(start_time.elapsed()));
 
-        if networks.is_empty() {
+        if is_empty {
             return Err!("the list is empty");
+        } else if networks.is_empty() {
+            return Err!("the list has no networks for {ip_stack}");
         }
 
         Ok(networks)

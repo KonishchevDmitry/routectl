@@ -4,10 +4,12 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
+use crate::ips::IpStack;
 use crate::resolving::Target;
 
 #[derive(Deserialize, Serialize, Validate)]
 pub struct Rule {
+    pub ip_stack: Option<IpStack>,
     #[validate(length(min = 1))]
     pub targets: Vec<Target>,
     pub exclude: Vec<Target>,

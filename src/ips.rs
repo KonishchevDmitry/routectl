@@ -7,6 +7,7 @@ use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::{IpNet as IpNetTrait, IpRange};
 use itertools::Itertools;
 use log::warn;
+use serde::{Deserialize, Serialize};
 
 use crate::sources::{IpSource, IpSources, IpSourceType, IpSourceList, IpSourceListRef};
 
@@ -45,6 +46,63 @@ static RESERVED_NETWORKS: &'static [&'static str] = &[
     "fe80::/64",      // [Link] Link-local addresses
     "ff00::/8",       // Multicast
 ];
+
+#[derive(Clone, Copy, strum::Display)]
+pub enum IpVersion {
+    #[strum(to_string = "IPv4")]
+    V4,
+    #[strum(to_string = "IPv6")]
+    V6,
+}
+
+impl IpVersion {
+    pub fn matches(self, network: IpNet) -> bool {
+        match (self, network) {
+            (IpVersion::V4, IpNet::V4(_)) => true,
+            (IpVersion::V6, IpNet::V6(_)) => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize, strum::Display)]
+#[serde(rename_all="kebab-case")]
+pub enum IpStack {
+    #[strum(to_string = "IPv4 stack")]
+    V4,
+    #[strum(to_string = "IPv6 stack")]
+    V6,
+    #[strum(to_string = "dual-stack")]
+    Dual,
+}
+
+impl IpStack {
+    pub fn matches(self, network: IpNet) -> bool {
+        match (self, network) {
+            (IpStack::V4, IpNet::V4(_)) => true,
+            (IpStack::V6, IpNet::V6(_)) => true,
+            (IpStack::Dual, _) => true,
+            _ => false,
+        }
+    }
+}
+
+impl IntoIterator for IpStack {
+    type Item = IpVersion;
+    type IntoIter = std::iter::Copied<std::slice::Iter<'static, IpVersion>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        static V4: &[IpVersion] = &[IpVersion::V4];
+        static V6: &[IpVersion] = &[IpVersion::V6];
+        static DUAL: &[IpVersion] = &[IpVersion::V4, IpVersion::V6];
+
+        match self {
+            IpStack::V4 => V4,
+            IpStack::V6 => V6,
+            IpStack::Dual => DUAL,
+        }.iter().copied()
+    }
+}
 
 pub struct Networks {
     // We might pack IPv4 into IPv6 using IPv4-mapped addresses and don't manage these split IP sets, but not sure that

@@ -5,9 +5,8 @@ use futures::stream::{self, StreamExt, TryStreamExt};
 use log::{Level, log_enabled, debug};
 
 use crate::config::Config;
-use crate::ips::HumanNetwork;
-use crate::resolving::Resolver;
-use crate::rules::Rule;
+use crate::ips::{HumanNetwork, IpStack};
+use crate::resolving::{Resolver, Target};
 
 #[tokio::main]
 pub async fn generate(config: &Config) -> Result<()> {
@@ -15,8 +14,9 @@ pub async fn generate(config: &Config) -> Result<()> {
 
     stream::iter(&config.rules)
         .map(|(name, rule)| async {
-            let name = name.clone();
-            process_rule(&name, rule, &resolver).await.with_context(|| format!(
+            let name = name.to_owned();
+            let ip_stack = rule.ip_stack.unwrap_or(config.ip_stack);
+            process_rule(&name, ip_stack, &rule.targets, &rule.exclude, &resolver).await.with_context(|| format!(
                 "failed to process rule {name:?}"))
         })
         .buffer_unordered(usize::MAX)
@@ -26,18 +26,20 @@ pub async fn generate(config: &Config) -> Result<()> {
     Ok(())
 }
 
-async fn process_rule(name: &str, rule: &Rule, resolver: &Resolver) -> Result<()> {
+async fn process_rule(
+    context: &str, ip_stack: IpStack, targets: &[Target], excludes: &[Target], resolver: &Resolver,
+) -> Result<()> {
     let (targets, excludes) = tokio::try_join!(
-        resolver.resolve(name, &rule.targets),
-        resolver.resolve(name, &rule.exclude),
+        resolver.resolve(context, ip_stack, targets),
+        resolver.resolve(context, ip_stack, excludes),
     )?;
 
-    let result = targets.filter(name, &excludes);
+    let result = targets.filter(context, &excludes);
 
     if log_enabled!(Level::Debug) {
         let mut buf = String::new();
 
-        write!(&mut buf, "[{name}] Got the following networks:").unwrap();
+        write!(&mut buf, "[{context}] Got the following networks:").unwrap();
         for (network, sources) in &result {
             write!(&mut buf, "\n* {} (source: {sources})", HumanNetwork(network)).unwrap();
         }

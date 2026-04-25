@@ -11,7 +11,7 @@ use tokio::sync::Semaphore;
 use validator::Validate;
 use url::Url;
 
-use crate::ips::{self, Networks};
+use crate::ips::{self, HumanNetwork, IpStack, Networks};
 use crate::sources::{IpSource, IpSourceType, IpSourceList, IpSourceListRef};
 
 use lists::Lists;
@@ -75,12 +75,12 @@ impl Resolver {
         })
     }
 
-    pub async fn resolve(&self, context: &str, targets: &[Target]) -> Result<Networks> {
+    pub async fn resolve(&self, context: &str, ip_stack: IpStack, targets: &[Target]) -> Result<Networks> {
         let networks = Mutex::new(Networks::new());
 
         {
             let mut stream = stream::iter(targets)
-                .map(|target| self.resolve_target(context, target, &networks))
+                .map(|target| self.resolve_target(context, ip_stack, target, &networks))
                 .buffer_unordered(self.concurrency);
 
             while let Some(result) = stream.next().await {
@@ -91,7 +91,7 @@ impl Resolver {
         Ok(networks.into_inner().unwrap())
     }
 
-    async fn resolve_target(&self, context: &str, target: &Target, result: &Mutex<Networks>) -> Result<()> {
+    async fn resolve_target(&self, context: &str, ip_stack: IpStack, target: &Target, result: &Mutex<Networks>) -> Result<()> {
         match target {
             &Target::Network(network) => {
                 let source_type = IpSourceType::Network(network);
@@ -103,7 +103,7 @@ impl Resolver {
             Target::List(url) => {
                 let list_networks = {
                     let _permit = self.semaphore.acquire().await.unwrap();
-                    self.lists.fetch(url).await.with_context(|| format!("fetch {url}"))?
+                    self.lists.fetch(url, ip_stack).await.with_context(|| format!("fetch {url}"))?
                 };
 
                 let source_list = IpSourceListRef::new(IpSourceList::Rule(Some(url.to_owned())));
