@@ -6,6 +6,7 @@ use log::debug;
 use tokio::process::Command;
 
 use crate::ips::IpVersion;
+use crate::resolving::TransientError;
 use crate::util;
 
 pub const AS_PREFIX: &str = "AS";
@@ -33,10 +34,19 @@ impl AsResolver {
             "failed to execute `{:?}`: {e}", command.as_std()))?;
         let finish_time = Instant::now();
 
+        let status = result.status;
         let stderr = String::from_utf8_lossy(&result.stderr);
-        if !result.status.success() {
-            return Err!("`{:?}` returned an error ({}):{}",
-                command.as_std(), result.status, util::format_multiline(&stderr));
+
+        if !status.success() {
+            let mut err = anyhow!(
+                "`{:?}` returned an error ({status}):{}",
+                command.as_std(), util::format_multiline(&stderr));
+
+            if status.code().is_some() {
+                err = err.context(TransientError);
+            }
+
+            return Err(err);
         } else if !stderr.is_empty() {
             debug!("`{:?}` stderr:{}", command.as_std(), util::format_multiline(&stderr));
         }

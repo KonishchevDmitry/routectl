@@ -119,15 +119,16 @@ impl Resolver {
     async fn resolve_target(&self, context: &str, ip_stack: IpStack, target: &Target, result: &Mutex<Networks>) -> Result<()> {
         match target {
             &Target::AS(number) => {
-                // XXX(konishchev): Retry
                 let as_networks = stream::iter(ip_stack)
                     .map(|version| async move {
-                        let _permit = self.semaphore.acquire().await.unwrap();
-                        self.r#as.resolve(number, version).await
+                        self.resolve_inner(context, || async {
+                            self.r#as.resolve(number, version).await
+                                .with_context(|| format!("resolve {AS_PREFIX}{number}"))
+                        }).await
                     })
                     .buffer_unordered(self.concurrency)
-                    .try_concat().await
-                    .with_context(|| format!("resolve {AS_PREFIX}{number}"))?;
+                    .try_concat()
+                    .await?;
 
                 let source_list = IpSourceListRef::new(IpSourceList::As(number));
                 self.on_resolved_network_list(context, as_networks, source_list, result);
@@ -135,7 +136,8 @@ impl Resolver {
 
             Target::List(url) => {
                 let list_networks = self.resolve_inner(context, || async {
-                    self.lists.fetch(url, ip_stack).await.with_context(|| format!("fetch {url}"))
+                    self.lists.fetch(url, ip_stack).await
+                        .with_context(|| format!("fetch {url}"))
                 }).await?;
 
                 let source_list = IpSourceListRef::new(IpSourceList::List(url.to_owned()));
