@@ -2,6 +2,11 @@ ip_stack: dual
 
 resolver:
   concurrency: 2
+  retry:
+    # min_delay: 1s
+    # max_delay: 1m
+    # max_times: 3
+    max_total_delay: 3m
 
 rules:
   test:
@@ -10,8 +15,8 @@ rules:
     - 1.1.1.0/24
     - 2.2.2.2
     - 3.3.3.0/24
-    - AS1273
-    # - https://core.telegram.org/resources/cidr.txt
+    # - AS1273
+    - https://core.telegram.org/resources/cidr.txt
 
     exclude:
     - 3.3.3.3/25

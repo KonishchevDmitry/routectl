@@ -47,20 +47,12 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let Err(err) = run(&args) else {
-        return ExitCode::SUCCESS;
+    if let Err(err) = run(&args) {
+        error!("{}", util::format_error(&err));
+        return ExitCode::FAILURE;
     };
 
-    // FIXME(konishchev): title
-    let message = format!("{err:#}");
-
-    if message.contains('\n') || message.ends_with('.') {
-        error!("{message}");
-    } else {
-        error!("{message}.");
-    }
-
-    ExitCode::FAILURE
+    ExitCode::SUCCESS
 }
 
 fn run(args: &Args) -> Result<()> {

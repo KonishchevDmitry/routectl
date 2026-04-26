@@ -1,19 +1,25 @@
 mod r#as;
 mod lists;
 
+use std::fmt::{self, Display, Formatter};
+use std::future::Future;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
+use backon::{ExponentialBuilder, Retryable};
 use futures::stream::{self, StreamExt, TryStreamExt};
 use ipnet::IpNet;
+use log::warn;
 use serde::{Deserialize, Serialize, Serializer};
-use serde::de::{Deserializer, Error};
+use serde::de::{Deserializer, Error as _};
 use tokio::sync::Semaphore;
 use validator::Validate;
 use url::Url;
 
 use crate::ips::{self, HumanNetwork, IpStack, Networks};
 use crate::sources::{IpSource, IpSourceType, IpSourceList, IpSourceListRef};
+use crate::util;
 
 use r#as::AsResolver;
 use lists::Lists;
@@ -59,15 +65,21 @@ impl<'de> Deserialize<'de> for Target {
 pub struct ResolverConfig {
     #[validate(range(min = 1))]
     concurrency: usize,
+
+    #[serde(default)]
+    #[validate(nested)]
+    retry: RetryConfig,
 }
 
 pub struct Resolver {
     concurrency: usize,
     semaphore: Semaphore,
+    retry: RetryConfig,
+
+    special_networks: Networks,
 
     r#as: AsResolver,
     lists: Lists,
-    special_networks: Networks,
 }
 
 impl Resolver {
@@ -79,10 +91,12 @@ impl Resolver {
         Ok(Self {
             concurrency: config.concurrency,
             semaphore: Semaphore::new(config.concurrency),
+            retry: config.retry,
+
+            special_networks,
 
             r#as: AsResolver::new(),
             lists: Lists::new().context("failed to create lists resolver")?,
-            special_networks,
         })
     }
 
@@ -105,6 +119,7 @@ impl Resolver {
     async fn resolve_target(&self, context: &str, ip_stack: IpStack, target: &Target, result: &Mutex<Networks>) -> Result<()> {
         match target {
             &Target::AS(number) => {
+                // XXX(konishchev): Retry
                 let as_networks = stream::iter(ip_stack)
                     .map(|version| async move {
                         let _permit = self.semaphore.acquire().await.unwrap();
@@ -119,10 +134,9 @@ impl Resolver {
             },
 
             Target::List(url) => {
-                let list_networks = {
-                    let _permit = self.semaphore.acquire().await.unwrap();
-                    self.lists.fetch(url, ip_stack).await.with_context(|| format!("fetch {url}"))?
-                };
+                let list_networks = self.resolve_inner(context, || async {
+                    self.lists.fetch(url, ip_stack).await.with_context(|| format!("fetch {url}"))
+                }).await?;
 
                 let source_list = IpSourceListRef::new(IpSourceList::List(url.to_owned()));
                 self.on_resolved_network_list(context, list_networks, source_list, result);
@@ -144,6 +158,22 @@ impl Resolver {
         Ok(())
     }
 
+    async fn resolve_inner<F, Fut, R>(&self, context: &str, resolve: F) -> Result<R>
+        where
+            F: Fn() -> Fut,
+            Fut: Future<Output = Result<R>>,
+    {
+        let _permit = self.semaphore.acquire().await.unwrap();
+
+        resolve
+            .retry(self.retry.backoff_builder())
+            .when(anyhow::Error::is::<TransientError>)
+            .notify(|err: &anyhow::Error, delay: Duration| {
+                warn!("[{context}] [retry in {}] {}", util::format_duration(delay), util::format_error(err));
+            })
+            .await
+    }
+
     fn on_resolved_network_list(
         &self, context: &str, list_networks: Vec<IpNet>, source_list: IpSourceListRef, result: &Mutex<Networks>,
     ) {
@@ -153,5 +183,44 @@ impl Resolver {
                 result.lock().unwrap().add(filtered_network, source.clone());
             }
         }
+    }
+}
+
+#[derive(Debug)]
+struct TransientError;
+
+impl std::error::Error for TransientError {
+}
+
+impl Display for TransientError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("transient error")
+    }
+}
+
+#[derive(Clone, Copy, Default, Deserialize, Validate)]
+struct RetryConfig {
+    #[serde(default, with = "humantime_serde")]
+    min_delay: Option<Duration>,
+    #[serde(default, with = "humantime_serde")]
+    max_delay: Option<Duration>,
+
+    max_times: Option<usize>,
+    #[serde(default, with = "humantime_serde")]
+    max_total_delay: Option<Duration>,
+}
+
+impl RetryConfig {
+    fn backoff_builder(&self) -> ExponentialBuilder {
+        let mut builder = ExponentialBuilder::new()
+            .with_min_delay(self.min_delay.unwrap_or(Duration::from_secs(1)))
+            .with_max_delay(self.max_delay.unwrap_or(Duration::from_mins(1)))
+            .with_max_times(self.max_times.unwrap_or(3));
+
+        if self.max_times.is_none() && self.max_total_delay.is_some() {
+            builder = builder.without_max_times();
+        }
+
+        builder.with_total_delay(self.max_total_delay)
     }
 }

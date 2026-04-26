@@ -2,7 +2,7 @@ use std::error;
 use std::io::{self, ErrorKind};
 use std::time::Instant;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use futures_util::StreamExt;
 use ipnet::IpNet;
 use log::debug;
@@ -11,6 +11,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio_util::io::StreamReader;
 use url::Url;
 
+use crate::resolving::TransientError;
 use crate::ips::{self, IpStack};
 use crate::util;
 
@@ -34,9 +35,16 @@ impl Lists {
         debug!("Fetching {url} ({ip_stack})...");
         let start_time = Instant::now();
 
-        let response = self.client.get(url.to_owned()).send().await.map_err(humanize_reqwest_error)?;
-        if !response.status().is_success() {
-            return Err!("server returned an error: {}", response.status());
+        let response = self.client.get(url.to_owned()).send().await
+            .map_err(humanize_reqwest_error)
+            .context(TransientError)?;
+
+        if let status = response.status() && !status.is_success() {
+            let mut err = Err!("server returned an error: {status}");
+            if status.is_server_error() {
+                err = err.context(TransientError);
+            }
+            return err;
         }
 
         let mut lines = StreamReader::new(response.bytes_stream().map(|result| {
@@ -46,7 +54,7 @@ impl Lists {
         let mut is_empty = true;
         let mut networks = Vec::new();
 
-        while let Some(line) = lines.next_line().await? {
+        while let Some(line) = lines.next_line().await.context(TransientError)? {
             let line = line.trim();
             if line.is_empty() {
                 continue;
