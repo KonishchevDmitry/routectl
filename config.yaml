@@ -10,7 +10,8 @@ rules:
     - 1.1.1.0/24
     - 2.2.2.2
     - 3.3.3.0/24
-    - https://core.telegram.org/resources/cidr.txt
+    - AS1273
+    # - https://core.telegram.org/resources/cidr.txt
 
     exclude:
     - 3.3.3.3/25

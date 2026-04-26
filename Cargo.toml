@@ -23,7 +23,7 @@ serde_yaml = "0.9.34"
 # FIXME(konishchev): Drop it?
 strum = { version = "0.28.0", features = ["derive"] }
 # FIXME(konishchev): Check features
-tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.43.0", features = ["macros", "process", "rt-multi-thread"] }
 tokio-util = "0.7.18"
 url = "2.5.8"
 validator = { version = "0.20.0", features = ["derive"] }

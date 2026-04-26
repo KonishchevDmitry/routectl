@@ -5,6 +5,7 @@ use ipnet::IpNet;
 use url::Url;
 
 use crate::ips::HumanNetwork;
+use crate::resolving::AS_PREFIX;
 
 #[derive(Clone)]
 pub struct IpSource {
@@ -21,10 +22,13 @@ impl IpSource {
 impl Display for IpSource {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.list.as_ref() {
-            IpSourceList::Rule(url) => {
-                if let Some(url) = url {
-                    write!(f, "{url}#")?;
-                }
+            IpSourceList::As(number) => {
+                write!(f, "{AS_PREFIX}{number}[{}]", self.type_)
+            },
+            IpSourceList::List(url) => {
+                write!(f, "{url}#{}", self.type_)
+            },
+            IpSourceList::Manual => {
                 write!(f, "{}", self.type_)
             },
             IpSourceList::Special(name) => {
@@ -48,7 +52,9 @@ impl Display for IpSourceType {
 }
 
 pub enum IpSourceList {
-    Rule(Option<Url>),
+    As(u32),
+    List(Url),
+    Manual,
     Special(&'static str),
 }
 
