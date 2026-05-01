@@ -10,9 +10,12 @@ use crate::resolving::Target;
 #[derive(Deserialize, Serialize, Validate)]
 pub struct Rule {
     pub ip_stack: Option<IpStack>,
-    #[validate(length(min = 1))]
+
+    #[serde(deserialize_with = "Target::deserialize_list")]
     pub targets: Vec<Target>,
+
     #[serde(default)]
+    #[serde(deserialize_with = "Target::deserialize_list")]
     pub exclude: Vec<Target>,
 }
 

@@ -8,7 +8,7 @@ use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use backon::{ExponentialBuilder, Retryable};
 use futures::stream::{self, StreamExt, TryStreamExt};
 use ipnet::IpNet;
@@ -36,6 +36,48 @@ pub enum Target {
     Network(IpNet),
 }
 
+impl Target {
+    pub fn deserialize_list<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
+        where D: Deserializer<'de>
+    {
+        let values: Vec<String> = Deserialize::deserialize(deserializer)?;
+        let mut targets = Vec::new();
+
+        for value in values {
+            let mut valid = false;
+
+            for target in value.split_ascii_whitespace() {
+                let target = Target::deserialize(target).map_err(|e|
+                    D::Error::custom(format!("{e:#}")))?;
+                targets.push(target);
+                valid = true;
+            }
+
+            if !valid {
+                return Err(D::Error::custom(format!("invalid target: {value:?}")));
+            }
+        }
+
+        Ok(targets)
+    }
+
+    fn deserialize(target: &str) -> Result<Target> {
+        Ok(if let Some(number) = target.strip_prefix(AS_PREFIX) {
+            let number = number.parse().map_err(|_| anyhow!(
+                "invalid AS number: {target:?}"))?;
+            Target::AS(number)
+        } else if let Some(network) = ips::parse_network(target) {
+            Target::Network(network)
+        } else if let Some(domain) = sources::parse_domain(target) {
+            Target::Domain(domain)
+        } else if let Ok(url) = target.parse::<Url>() && (url.scheme() == "https" || url.scheme() == "http") {
+            Target::List(url)
+        } else {
+            return Err!("invalid target: {target:?}")
+        })
+    }
+}
+
 impl Serialize for Target {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -44,27 +86,6 @@ impl Serialize for Target {
             Target::List(url) => url.as_str().serialize(serializer),
             &Target::Network(network) => network.to_string().serialize(serializer),
         }
-    }
-}
-
-impl<'de> Deserialize<'de> for Target {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>
-    {
-        let target: String = Deserialize::deserialize(deserializer)?;
-
-        if let Some(number) = target.strip_prefix(AS_PREFIX) {
-            return Ok(Target::AS(number.parse().map_err(|_| D::Error::custom(format!(
-                "invalid AS number: {target:?}")))?));
-        } else if let Some(network) = ips::parse_network(&target) {
-            return Ok(Target::Network(network))
-        } else if let Some(domain) = sources::parse_domain(&target) {
-            return Ok(Target::Domain(domain));
-        } else if let Ok(url) = target.parse::<Url>() && (url.scheme() == "https" || url.scheme() == "http") {
-            return Ok(Target::List(url));
-        }
-
-        Err(D::Error::custom(format!("invalid target: {target:?}")))
     }
 }
 
@@ -176,6 +197,8 @@ impl Resolver {
                         result_networks.lock().unwrap().add(filtered_ip, source.clone());
                     }
                 }
+
+                result_domains.lock().unwrap().insert(domain.clone());
             },
 
             Target::List(url) => {
