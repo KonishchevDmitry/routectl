@@ -7,6 +7,8 @@ use url::Url;
 use crate::ips::HumanNetwork;
 use crate::resolving::AS_PREFIX;
 
+pub use hickory_resolver::proto::rr::Name as Domain;
+
 #[derive(Clone)]
 pub struct IpSource {
     type_: IpSourceType,
@@ -40,12 +42,14 @@ impl Display for IpSource {
 
 #[derive(Clone)]
 pub enum IpSourceType {
+    Domain(Arc<Domain>),
     Network(IpNet),
 }
 
 impl Display for IpSourceType {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            IpSourceType::Domain(domain) => write!(f, "{domain}"),
             &IpSourceType::Network(network) => write!(f, "{}", HumanNetwork(network)),
         }
     }
