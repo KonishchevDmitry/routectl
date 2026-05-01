@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use serde::Deserialize;
 use validator::{Validate, ValidationError};
 
 use crate::ips::IpStack;
+use crate::outputs::nftables::NftablesConfig;
 use crate::resolving::ResolverConfig;
 use crate::rules::RuleConfig;
 
@@ -19,6 +20,10 @@ pub struct Config {
 
     #[validate(length(min = 1), custom(function = "validate_rule_names"), nested)]
     pub rules: BTreeMap<String, RuleConfig>,
+
+    #[validate(nested)]
+    #[serde(default)]
+    pub nftables: BTreeMap<PathBuf, NftablesConfig>,
 }
 
 impl Config {

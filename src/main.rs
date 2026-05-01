@@ -2,6 +2,7 @@ mod config;
 #[macro_use] mod core;
 mod generator;
 mod ips;
+mod outputs;
 mod resolving;
 mod rules;
 mod sources;

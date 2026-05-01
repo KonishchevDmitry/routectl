@@ -1,9 +1,11 @@
 use anyhow::Result;
 
 use crate::config::Config;
+use crate::outputs::nftables;
 use crate::rules;
 
 pub fn generate(config: &Config) -> Result<()> {
-    rules::resolve(config)?;
+    let rules = rules::resolve(config)?;
+    nftables::generate(&config.nftables, &rules)?;
     Ok(())
 }
