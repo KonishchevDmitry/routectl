@@ -174,8 +174,11 @@ pub fn reserved_networks() -> Result<Networks> {
     Ok(networks)
 }
 
-pub fn filter(context: &str, network: IpNet, source: &IpSource, excludes: &Networks) -> impl Iterator<Item=IpNet> {
-    match network {
+pub fn filter<N>(context: &str, network: N, source: &IpSource, excludes: &Networks) -> impl Iterator<Item=IpNet>
+    where
+        N: Into<IpNet>
+{
+    match network.into() {
         IpNet::V4(network) => filter_network(context, network, source, &excludes.v4)
             .into_iter().map(IpNet::from).collect_vec().into_iter(),
 

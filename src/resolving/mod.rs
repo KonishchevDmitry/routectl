@@ -2,9 +2,10 @@ mod r#as;
 mod dns;
 mod lists;
 
+use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::future::Future;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -18,17 +19,19 @@ use tokio::sync::Semaphore;
 use validator::Validate;
 use url::Url;
 
-use crate::ips::{self, HumanNetwork, IpStack, Networks};
-use crate::sources::{IpSource, IpSourceType, IpSourceList, IpSourceListRef};
+use crate::ips::{self, HumanNetwork, IpStack, IpVersion, Networks};
+use crate::sources::{self, Domain, IpSource, IpSourceType, IpSourceList, IpSourceListRef};
 use crate::util;
 
 use r#as::AsResolver;
-use lists::Lists;
+use dns::DnsResolver;
+use lists::ListsResolver;
 
 pub use r#as::AS_PREFIX;
 
 pub enum Target {
     AS(u32),
+    Domain(Domain),
     List(Url),
     Network(IpNet),
 }
@@ -37,6 +40,7 @@ impl Serialize for Target {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
             &Target::AS(number) => format!("{AS_PREFIX}{number}").serialize(serializer),
+            Target::Domain(domain) => domain.to_string().serialize(serializer),
             Target::List(url) => url.as_str().serialize(serializer),
             &Target::Network(network) => network.to_string().serialize(serializer),
         }
@@ -54,6 +58,8 @@ impl<'de> Deserialize<'de> for Target {
                 "invalid AS number: {target:?}")))?));
         } else if let Some(network) = ips::parse_network(&target) {
             return Ok(Target::Network(network))
+        } else if let Some(domain) = sources::parse_domain(&target) {
+            return Ok(Target::Domain(domain));
         } else if let Ok(url) = target.parse::<Url>() && (url.scheme() == "https" || url.scheme() == "http") {
             return Ok(Target::List(url));
         }
@@ -80,12 +86,14 @@ pub struct Resolver {
     special_networks: Networks,
 
     r#as: AsResolver,
-    lists: Lists,
+    dns: DnsResolver,
+    lists: ListsResolver,
 }
 
 impl Resolver {
     pub fn new(config: &ResolverConfig) -> Result<Self> {
         // FIXME(konishchev): Add owned networks
+        // FIXME(konishchev): Must be also added to ipset to secure dnsmasq resolving
         let special_networks = ips::reserved_networks().context(
             "failed to get a list of reserved networks")?;
 
@@ -97,16 +105,20 @@ impl Resolver {
             special_networks,
 
             r#as: AsResolver::new(),
-            lists: Lists::new().context("failed to create lists resolver")?,
+            dns: DnsResolver::new(),
+            lists: ListsResolver::new().context("failed to create lists resolver")?,
         })
     }
 
-    pub async fn resolve(&self, context: &str, ip_stack: IpStack, targets: &[Target]) -> Result<Networks> {
+    pub async fn resolve(&self, context: &str, ip_stack: IpStack, targets: &[Target]) -> Result<(BTreeSet<Domain>, Networks)> {
+        let domains = Mutex::new(BTreeSet::new());
         let networks = Mutex::new(Networks::new());
 
         {
+            let manual_list = IpSourceListRef::new(IpSourceList::Manual);
+
             let mut stream = stream::iter(targets)
-                .map(|target| self.resolve_target(context, ip_stack, target, &networks))
+                .map(|target| self.resolve_target(context, &manual_list, ip_stack, target, &domains, &networks))
                 .buffer_unordered(self.concurrency);
 
             while let Some(result) = stream.next().await {
@@ -114,10 +126,16 @@ impl Resolver {
             }
         }
 
-        Ok(networks.into_inner().unwrap())
+        Ok((
+            domains.into_inner().unwrap(),
+            networks.into_inner().unwrap(),
+        ))
     }
 
-    async fn resolve_target(&self, context: &str, ip_stack: IpStack, target: &Target, result: &Mutex<Networks>) -> Result<()> {
+    async fn resolve_target(
+        &self, context: &str, manual_list: &IpSourceListRef, ip_stack: IpStack, target: &Target,
+        result_domains: &Mutex<BTreeSet<Domain>>, result_networks: &Mutex<Networks>,
+    ) -> Result<()> {
         match target {
             &Target::AS(number) => {
                 let name = &format!("{AS_PREFIX}{number}");
@@ -132,7 +150,32 @@ impl Resolver {
                 }
 
                 let source_list = IpSourceListRef::new(IpSourceList::As(number));
-                self.on_resolved_network_list(context, as_networks, source_list, result);
+                self.on_resolved_network_list(context, as_networks, source_list, result_networks);
+            },
+
+            Target::Domain(domain) if domain.is_wildcard() => {
+                result_domains.lock().unwrap().insert(domain.clone());
+            },
+
+            Target::Domain(domain) => {
+                let domain_ips = self.resolve_inner_by_ip_version(context, ip_stack, |version| async move {
+                    self.dns.resolve(domain, version).await
+                        .with_context(|| format!("resolve {domain}"))
+                }).await?;
+
+                if domain_ips.is_empty() {
+                    return Err!("invalid domain: {domain}");
+                }
+
+                let source_type = IpSourceType::Domain(Arc::new(domain.to_owned()));
+                let source = IpSource::new(source_type, manual_list.clone());
+
+                for domain_ip in domain_ips {
+                    // FIXME(konishchev): Should we somehow filter the whole domain here?
+                    for filtered_ip in ips::filter(context, domain_ip, &source, &self.special_networks) {
+                        result_networks.lock().unwrap().add(filtered_ip, source.clone());
+                    }
+                }
             },
 
             Target::List(url) => {
@@ -142,7 +185,7 @@ impl Resolver {
                 }).await?;
 
                 let source_list = IpSourceListRef::new(IpSourceList::List(url.to_owned()));
-                self.on_resolved_network_list(context, list_networks, source_list, result);
+                self.on_resolved_network_list(context, list_networks, source_list, result_networks);
             },
 
             &Target::Network(network) => {
@@ -151,10 +194,9 @@ impl Resolver {
                 }
 
                 let source_type = IpSourceType::Network(network);
-                let source_list = IpSourceListRef::new(IpSourceList::Manual);
-                let source = IpSource::new(source_type, source_list);
+                let source = IpSource::new(source_type, manual_list.clone());
 
-                result.lock().unwrap().add(network, source);
+                result_networks.lock().unwrap().add(network, source);
             },
         }
 

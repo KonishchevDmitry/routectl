@@ -90,3 +90,55 @@ impl Display for IpSources {
         Ok(())
     }
 }
+
+pub fn parse_domain(domain: &str) -> Option<Domain> {
+    let mut domain: Domain = domain.parse().ok()?;
+
+    let mut parent = domain.base_name();
+    if parent.is_root() {
+        return None;
+    }
+
+    loop {
+        if parent.is_wildcard() {
+            return None;
+        }
+
+        parent = parent.base_name();
+        if parent.is_root() {
+            break;
+        }
+    }
+
+    domain.set_fqdn(false);
+    Some(domain)
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use super::*;
+
+    #[rstest(domain, expected,
+        case("a",  None),
+
+        case("b.a",  Some("b.a")),
+        case("B.A",  Some("b.a")),
+        case("р.ф",  Some("р.ф")),
+        case("Р.Ф",  Some("р.ф")),
+        case("b.a.",  Some("b.a")),
+
+        case("*",  None),
+        case("*.a",  Some("*.a")),
+        case("a.*",  None),
+        case("*.b.a",  Some("*.b.a")),
+        case("b.*.a",  None),
+        case("*.b.*.a",  None),
+        case("*.*.b.a",  None),
+    )]
+    fn domain_parsing(domain: &str, expected: Option<&str>) {
+        let result = parse_domain(domain).map(|domain| domain.to_string());
+        let expected = expected.map(ToOwned::to_owned);
+        assert_eq!(result, expected, "{domain}");
+    }
+}

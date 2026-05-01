@@ -31,12 +31,15 @@ pub async fn generate(config: &Config) -> Result<()> {
 async fn process_rule(
     context: &str, ip_stack: IpStack, targets: &[Target], excludes: &[Target], resolver: &Resolver,
 ) -> Result<()> {
-    let (targets, excludes) = tokio::try_join!(
+    let (
+        (target_domains, target_networks),
+        (exclude_domains, exclude_networks),
+    ) = tokio::try_join!(
         resolver.resolve(context, ip_stack, targets),
         resolver.resolve(context, ip_stack, excludes),
     )?;
 
-    let result = targets.filter(context, &excludes);
+    let result = target_networks.filter(context, &exclude_networks);
 
     if log_enabled!(Level::Debug) {
         let mut buf = String::new();
@@ -45,8 +48,19 @@ async fn process_rule(
         for (network, sources) in &result {
             write!(&mut buf, "\n* {} (source: {sources})", HumanNetwork(network)).unwrap();
         }
-
         debug!("{buf}");
+
+        for (domain_type, domains) in [("target", &target_domains), ("exclude", &exclude_domains)] {
+            if !domains.is_empty() {
+                buf.truncate(0);
+
+                write!(&mut buf, "[{context}] Got the following {domain_type} domains:").unwrap();
+                for domain in domains {
+                    write!(&mut buf, "\n* {domain}").unwrap();
+                }
+                debug!("{buf}");
+            }
+        }
     }
 
     Ok(())
