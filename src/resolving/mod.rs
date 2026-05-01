@@ -1,4 +1,5 @@
 mod r#as;
+mod dns;
 mod lists;
 
 use std::fmt::{self, Display, Formatter};
