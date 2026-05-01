@@ -8,7 +8,7 @@ use validator::{Validate, ValidationError};
 
 use crate::ips::IpStack;
 use crate::resolving::ResolverConfig;
-use crate::rules::Rule;
+use crate::rules::RuleConfig;
 
 #[derive(Deserialize, Validate)]
 pub struct Config {
@@ -18,7 +18,7 @@ pub struct Config {
     pub resolver: ResolverConfig,
 
     #[validate(length(min = 1), custom(function = "validate_rule_names"), nested)]
-    pub rules: BTreeMap<String, Rule>,
+    pub rules: BTreeMap<String, RuleConfig>,
 }
 
 impl Config {
@@ -32,9 +32,9 @@ impl Config {
     }
 }
 
-fn validate_rule_names(rules: &BTreeMap<String, Rule>) -> Result<(), ValidationError> {
+fn validate_rule_names(rules: &BTreeMap<String, RuleConfig>) -> Result<(), ValidationError> {
     for name in rules.keys() {
-        Rule::validate_name(name)?;
+        RuleConfig::validate_name(name)?;
     }
     Ok(())
 }

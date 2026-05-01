@@ -136,6 +136,10 @@ impl Networks {
             v6: filter_networks(context, &self.v6, &excludes.v6),
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.v4.is_empty() && self.v6.is_empty()
+    }
 }
 
 impl<'a> IntoIterator for &'a Networks {

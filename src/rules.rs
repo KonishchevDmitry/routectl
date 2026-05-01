@@ -1,14 +1,21 @@
+use std::collections::{BTreeSet, HashMap};
+use std::fmt::Write;
 use std::sync::LazyLock;
 
+use anyhow::{Context, Result};
+use futures::stream::{self, StreamExt, TryStreamExt};
+use log::{Level, log_enabled, debug};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
-use crate::ips::IpStack;
-use crate::resolving::Target;
+use crate::config::Config;
+use crate::ips::{HumanNetwork, IpStack, Networks};
+use crate::resolving::{Resolver, Target};
+use crate::sources::Domain;
 
 #[derive(Deserialize, Serialize, Validate)]
-pub struct Rule {
+pub struct RuleConfig {
     pub ip_stack: Option<IpStack>,
 
     #[serde(deserialize_with = "Target::deserialize_list")]
@@ -19,7 +26,7 @@ pub struct Rule {
     pub exclude: Vec<Target>,
 }
 
-impl Rule {
+impl RuleConfig {
     pub fn validate_name(name: &str) -> Result<(), ValidationError> {
         static NAME_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
             r"^[a-z]+(?:-[a-z]+)*$").unwrap());
@@ -31,4 +38,77 @@ impl Rule {
 
         Ok(())
     }
+
+    // FIXME(konishchev): Compact the network lists
+    // FIXME(konishchev): Do we need to calculate domains intersection?
+    async fn resolve(&self, name: &str, global_ip_stack: IpStack, resolver: &Resolver) -> Result<Rule> {
+        let ip_stack = self.ip_stack.unwrap_or(global_ip_stack);
+
+        let (
+            (target_domains, target_networks),
+            (exclude_domains, exclude_networks),
+        ) = tokio::try_join!(
+            resolver.resolve(name, ip_stack, &self.targets),
+            resolver.resolve(name, ip_stack, &self.exclude),
+        )?;
+
+        let target_networks = target_networks.filter(name, &exclude_networks);
+
+        if log_enabled!(Level::Debug) {
+            let mut buf = String::new();
+
+            if !target_networks.is_empty() {
+                write!(&mut buf, "[{name}] Got the following networks:").unwrap();
+                for (network, sources) in &target_networks {
+                    write!(&mut buf, "\n* {} (source: {sources})", HumanNetwork(network)).unwrap();
+                }
+                debug!("{buf}");
+            }
+
+            for (domain_type, domains) in [("target", &target_domains), ("exclude", &exclude_domains)] {
+                if !domains.is_empty() {
+                    buf.truncate(0);
+
+                    write!(&mut buf, "[{name}] Got the following {domain_type} domains:").unwrap();
+                    for domain in domains {
+                        write!(&mut buf, "\n* {domain}").unwrap();
+                    }
+                    debug!("{buf}");
+                }
+            }
+        }
+
+        Ok(Rule {
+            target_domains,
+            exclude_domains,
+
+            target_networks,
+            exclude_networks,
+        })
+    }
+}
+
+pub struct Rule {
+    target_domains: BTreeSet<Domain>,
+    exclude_domains: BTreeSet<Domain>,
+
+    target_networks: Networks,
+    exclude_networks: Networks,
+}
+
+#[tokio::main]
+pub async fn resolve(config: &Config) -> Result<HashMap<String, Rule>> {
+    let resolver = &Resolver::new(&config.resolver)?;
+
+    Ok(stream::iter(&config.rules)
+        .map(|(name, spec)| {
+            async move {
+                spec.resolve(name, config.ip_stack, resolver).await
+                    .with_context(|| format!("failed to process rule {name:?}"))
+                    .map(|rule| (name.to_owned(), rule))
+            }
+        })
+        .buffer_unordered(usize::MAX)
+        .try_collect()
+        .await?)
 }
