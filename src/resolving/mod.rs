@@ -119,16 +119,16 @@ impl Resolver {
     async fn resolve_target(&self, context: &str, ip_stack: IpStack, target: &Target, result: &Mutex<Networks>) -> Result<()> {
         match target {
             &Target::AS(number) => {
-                let as_networks = stream::iter(ip_stack)
-                    .map(|version| async move {
-                        self.resolve_inner(context, || async {
-                            self.r#as.resolve(number, version).await
-                                .with_context(|| format!("resolve {AS_PREFIX}{number}"))
-                        }).await
-                    })
-                    .buffer_unordered(self.concurrency)
-                    .try_concat()
-                    .await?;
+                let name = &format!("{AS_PREFIX}{number}");
+
+                let as_networks = self.resolve_inner_by_ip_version(context, ip_stack, |version| async move {
+                    self.r#as.resolve(number, version).await
+                        .with_context(|| format!("resolve {name}"))
+                }).await?;
+
+                if as_networks.is_empty() {
+                    return Err!("invalid autonomous system: {name}");
+                }
 
                 let source_list = IpSourceListRef::new(IpSourceList::As(number));
                 self.on_resolved_network_list(context, as_networks, source_list, result);
@@ -158,6 +158,22 @@ impl Resolver {
         }
 
         Ok(())
+    }
+
+    async fn resolve_inner_by_ip_version<F, Fut, R>(&self, context: &str, ip_stack: IpStack, resolve: F) -> Result<Vec<R>>
+        where
+            F: Fn(IpVersion) -> Fut + Copy,
+            Fut: Future<Output = Result<Vec<R>>>,
+    {
+        stream::iter(ip_stack)
+            .map(|version| async move {
+                self.resolve_inner(context, || async {
+                    resolve(version).await
+                }).await
+            })
+            .buffer_unordered(self.concurrency)
+            .try_concat()
+            .await
     }
 
     async fn resolve_inner<F, Fut, R>(&self, context: &str, resolve: F) -> Result<R>

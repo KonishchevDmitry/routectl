@@ -12,6 +12,7 @@ pub struct Rule {
     pub ip_stack: Option<IpStack>,
     #[validate(length(min = 1))]
     pub targets: Vec<Target>,
+    #[serde(default)]
     pub exclude: Vec<Target>,
 }
 

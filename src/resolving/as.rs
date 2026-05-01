@@ -28,11 +28,11 @@ impl AsResolver {
         }).arg("-F").arg(r"%n/%l\n").arg(&name);
 
         debug!("Resolving {name} ({version}) via `{:?}`...", command.as_std());
-        let start_time = Instant::now();
 
+        let start_time = Instant::now();
         let result = command.output().await.map_err(|e| anyhow!(
             "failed to execute `{:?}`: {e}", command.as_std()))?;
-        let finish_time = Instant::now();
+        let duration = Instant::now() - start_time;
 
         let status = result.status;
         let stderr = String::from_utf8_lossy(&result.stderr);
@@ -69,13 +69,7 @@ impl AsResolver {
             networks.push(network);
         }
 
-        debug!("Got {} {version} networks for {name} in {}.",
-            networks.len(), util::format_duration(finish_time - start_time));
-
-        if networks.is_empty() {
-            return Err!("invalid autonomous system");
-        }
-
+        debug!("Got {} {version} networks for {name} in {}.", networks.len(), util::format_duration(duration));
         Ok(networks)
     }
 }

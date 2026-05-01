@@ -15,11 +15,11 @@ use crate::resolving::TransientError;
 use crate::ips::{self, IpStack};
 use crate::util;
 
-pub struct Lists {
+pub struct ListsResolver {
     client: Client,
 }
 
-impl Lists {
+impl ListsResolver {
     pub fn new() -> Result<Self> {
         let user_agent = format!("{name} ({homepage})",
             name=env!("CARGO_PKG_NAME"), homepage=env!("CARGO_PKG_REPOSITORY"));
