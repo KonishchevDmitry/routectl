@@ -1,8 +1,8 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use futures::stream::{self, StreamExt, TryStreamExt};
 use log::{Level, log_enabled, debug};
 use regex::Regex;
@@ -27,13 +27,15 @@ pub struct RuleConfig {
 }
 
 impl RuleConfig {
-    pub fn validate_name(name: &str) -> Result<(), ValidationError> {
+    pub fn validate(rules: &BTreeMap<String, RuleConfig>) -> Result<(), ValidationError> {
         static NAME_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
             r"^[a-z]+(?:-[a-z]+)*$").unwrap());
 
-        if !NAME_RE.is_match(name) {
-            return Err(ValidationError::new("invalid rule name").with_message(format!(
-                "invalid rule name: {name:?} (must match `{}`)", NAME_RE.as_str()).into()));
+        for name in rules.keys() {
+            if !NAME_RE.is_match(name) {
+                return Err(ValidationError::new("invalid rule name").with_message(format!(
+                    "invalid rule name: {name:?} (must match `{}`)", NAME_RE.as_str()).into()));
+            }
         }
 
         Ok(())
@@ -89,11 +91,11 @@ impl RuleConfig {
 }
 
 pub struct Rule {
-    target_domains: BTreeSet<Domain>,
-    exclude_domains: BTreeSet<Domain>,
+    pub target_domains: BTreeSet<Domain>,
+    pub exclude_domains: BTreeSet<Domain>,
 
-    target_networks: Networks,
-    exclude_networks: Networks,
+    pub target_networks: Networks,
+    pub exclude_networks: Networks,
 }
 
 #[tokio::main]
@@ -111,4 +113,15 @@ pub async fn resolve(config: &Config) -> Result<HashMap<String, Rule>> {
         .buffer_unordered(usize::MAX)
         .try_collect()
         .await?)
+}
+
+pub fn get<'a>(rules: &'a HashMap<String, Rule>, names: &[String]) -> Result<&'a Rule> {
+    if names.is_empty() {
+        return Err!("got an empty rule list");
+    } else if names.len() != 1 {
+        return Err!("multiple rules specification isn't supported yet")
+    }
+
+    let name = &names[0];
+    rules.get(name).ok_or_else(|| anyhow!("invalid rule {name:?}"))
 }

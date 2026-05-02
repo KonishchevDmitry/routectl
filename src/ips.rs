@@ -56,6 +56,13 @@ pub enum IpVersion {
 }
 
 impl IpVersion {
+    pub fn version(self) -> usize {
+        match self {
+            IpVersion::V4 => 4,
+            IpVersion::V6 => 6,
+        }
+    }
+
     pub fn matches(self, network: IpNet) -> bool {
         match (self, network) {
             (IpVersion::V4, IpNet::V4(_)) => true,
@@ -130,15 +137,22 @@ impl Networks {
         networks.entry(network).or_default().add(source);
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.v4.is_empty() && self.v6.is_empty()
+    }
+
+    pub fn iter<'a>(&'a self, version: IpVersion) -> Box<dyn Iterator<Item = (IpNet, &'a IpSources)> + 'a> {
+        match version {
+            IpVersion::V4 => Box::new(self.v4.iter().map(|(&network, sources)| (IpNet::V4(network), sources))),
+            IpVersion::V6 => Box::new(self.v6.iter().map(|(&network, sources)| (IpNet::V6(network), sources))),
+        }
+    }
+
     pub fn filter(self, context: &str, excludes: &Networks) -> Networks {
         Networks {
             v4: filter_networks(context, &self.v4, &excludes.v4),
             v6: filter_networks(context, &self.v6, &excludes.v6),
         }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.v4.is_empty() && self.v6.is_empty()
     }
 }
 

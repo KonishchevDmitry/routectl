@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use serde::Deserialize;
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 use crate::ips::IpStack;
 use crate::outputs::nftables::NftablesConfig;
@@ -18,7 +18,7 @@ pub struct Config {
     #[validate(nested)]
     pub resolver: ResolverConfig,
 
-    #[validate(length(min = 1), custom(function = "validate_rule_names"), nested)]
+    #[validate(length(min = 1), custom(function = "RuleConfig::validate"), nested)]
     pub rules: BTreeMap<String, RuleConfig>,
 
     #[validate(nested)]
@@ -35,11 +35,4 @@ impl Config {
 
         Ok(config)
     }
-}
-
-fn validate_rule_names(rules: &BTreeMap<String, RuleConfig>) -> Result<(), ValidationError> {
-    for name in rules.keys() {
-        RuleConfig::validate_name(name)?;
-    }
-    Ok(())
 }

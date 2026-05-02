@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use ipnet::IpNet;
 use log::debug;
 use tokio::process::Command;
@@ -30,8 +30,8 @@ impl AsResolver {
         debug!("Resolving {name} ({version}) via `{:?}`...", command.as_std());
 
         let start_time = Instant::now();
-        let result = command.output().await.map_err(|e| anyhow!(
-            "failed to execute `{:?}`: {e}", command.as_std()))?;
+        let result = command.output().await.with_context(|| format!(
+            "failed to execute `{:?}`", command.as_std()))?;
         let duration = Instant::now() - start_time;
 
         let status = result.status;

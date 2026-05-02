@@ -1,9 +1,15 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::config::Config;
 use crate::rules;
 
 pub fn configure(config: &Config) -> Result<()> {
-    rules::resolve(config)?;
+    let rules = rules::resolve(config)?;
+
+    for (path, nftables) in &config.nftables {
+        nftables.configure(path, config.ip_stack, &rules).with_context(|| format!(
+            "configure {path:?}"))?;
+    }
+
     Ok(())
 }

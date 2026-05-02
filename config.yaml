@@ -23,3 +23,10 @@ rules:
     exclude:
     - 3.3.3.3/25
     - 3.3.3.255
+
+nftables:
+  test.nft:
+    sets:
+      test:
+        rules: [test]
+        with_exclude: true
