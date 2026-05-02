@@ -1,6 +1,6 @@
 mod config;
+mod configurator;
 #[macro_use] mod core;
-mod generator;
 mod ips;
 mod outputs;
 mod resolving;
@@ -35,8 +35,8 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    #[command(about = "Generates the configuration")]
-    Generate {},
+    #[command(about = "Configures the routing")]
+    Configure {},
 }
 
 fn main() -> ExitCode {
@@ -62,9 +62,7 @@ fn run(args: &Args) -> Result<()> {
         "failed to load configuration file {config_path:?}"))?;
 
     match &args.command {
-        Command::Generate {} => {
-            generator::generate(&config)?;
-        }
+        Command::Configure {} => configurator::configure(&config)?,
     }
 
     Ok(())
