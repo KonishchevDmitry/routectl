@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+set -eu
+cd "$(dirname "$(realpath "$0")")"
+
+project=routectl
+target=x86_64-unknown-linux-gnu
+
+host=root@server.lan
+install_path="/usr/local/bin/$project"
+
+rustup target add "$target"
+
+(
+    # Assumes installed https://github.com/messense/homebrew-macos-cross-toolchains
+    export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc
+    cargo build --release --target "$target"
+)
+
+scp "target/$target/release/$project" "$host:$install_path"
+ssh "$host" -- "$install_path" -h

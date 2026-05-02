@@ -22,7 +22,7 @@ pub struct ListsResolver {
 impl ListsResolver {
     pub fn new() -> Result<Self> {
         let user_agent = format!("{name} ({homepage})",
-            name=env!("CARGO_PKG_NAME"), homepage=env!("CARGO_PKG_REPOSITORY"));
+            name=env!("CARGO_PKG_NAME"), homepage=env!("CARGO_PKG_HOMEPAGE"));
 
         let client = ClientBuilder::new()
             .user_agent(user_agent)

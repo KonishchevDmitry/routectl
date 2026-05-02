@@ -1,9 +1,13 @@
 [package]
 name = "routectl"
 version = "0.1.0"
-description = "TODO" # FIXME(konishchev): Add
-repository = "https://github.com/KonishchevDmitry/routectl"
+description = "My personal split routing tooling"
+homepage = "https://github.com/KonishchevDmitry/routectl"
 edition = "2024"
+
+[profile.release]
+codegen-units = 1
+lto = true
 
 [dependencies]
 anyhow = "1.0.102"
@@ -23,9 +27,7 @@ regex = "1.11.1"
 reqwest = { version = "0.13.2", features = ["stream"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
-# FIXME(konishchev): Drop it?
 strum = { version = "0.28.0", features = ["derive"] }
-# FIXME(konishchev): Check features
 tokio = { version = "1.43.0", features = ["macros", "process", "rt-multi-thread"] }
 tokio-util = "0.7.18"
 url = "2.5.8"
