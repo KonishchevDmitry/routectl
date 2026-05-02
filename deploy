@@ -18,4 +18,4 @@ rustup target add "$target"
 )
 
 scp "target/$target/release/$project" "$host:$install_path"
-ssh "$host" -- "$install_path" -h
+ssh -t "$host" -- "$install_path" configure
