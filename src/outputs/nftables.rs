@@ -46,7 +46,7 @@ impl NftablesConfig {
         }
 
         file.flush()?;
-        nft(path, true)?;
+        nft(&temp_path, true)?;
 
         fs::rename(&temp_path, path).with_context(|| format!(
             "rename {temp_path:?} to {path:?}"))?;
