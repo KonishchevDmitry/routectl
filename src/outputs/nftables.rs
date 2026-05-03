@@ -96,7 +96,7 @@ impl NftablesIpSet {
             }
 
             for ip_version in ip_stack {
-                let nft_name = format!("{name}{name_suffix}_ip{version}", version=ip_version.version());
+                let nft_name = format!("{name}{name_suffix}_ipv{version}", version=ip_version.version());
 
                 let (nft_type, max_width, networks) = match ip_version {
                     IpVersion::V4 => ("ip",  18, networks.iter(ip_version)),
