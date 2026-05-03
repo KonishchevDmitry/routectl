@@ -1,4 +1,8 @@
+use std::process::Command;
 use std::time::Duration;
+
+use anyhow::{Context, Result};
+use log::debug;
 
 pub fn format_duration(mut duration: Duration) -> String {
     if duration >= Duration::from_secs(10) {
@@ -37,4 +41,24 @@ pub fn format_multiline(text: &str) -> String {
     } else {
         format!(" {text}")
     }
+}
+
+pub fn run(mut command: Command) -> Result<()> {
+    debug!("Running `{command:?}`...");
+
+    let result = command.output().with_context(|| format!(
+        "failed to execute `{command:?}`"))?;
+
+    let status = result.status;
+    let stderr = String::from_utf8_lossy(&result.stderr);
+
+    if !status.success() {
+        return Err!(
+            "`{command:?}` returned an error ({status}):{}",
+            format_multiline(&stderr));
+    } else if !stderr.is_empty() {
+        debug!("`{command:?}` stderr:{}", format_multiline(&stderr));
+    }
+
+    Ok(())
 }

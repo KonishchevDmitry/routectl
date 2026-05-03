@@ -148,22 +148,5 @@ fn nft(path: &Path, check: bool) -> Result<()> {
         command.arg("--check");
     }
     command.arg("--file").arg(path);
-
-    debug!("Running `{command:?}`...");
-
-    let result = command.output().with_context(|| format!(
-        "failed to execute `{command:?}`"))?;
-
-    let status = result.status;
-    let stderr = String::from_utf8_lossy(&result.stderr);
-
-    if !status.success() {
-        return Err!(
-            "`{command:?}` returned an error ({status}):{}",
-            util::format_multiline(&stderr));
-    } else if !stderr.is_empty() {
-        debug!("`{command:?}` stderr:{}", util::format_multiline(&stderr));
-    }
-
-    Ok(())
+    util::run(command)
 }
