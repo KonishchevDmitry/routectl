@@ -1,14 +1,11 @@
 use std::collections::{BTreeMap, HashMap};
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufWriter, Write};
-use std::os::unix::fs::OpenOptionsExt;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use dedent::dedent;
-use log::debug;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
@@ -26,33 +23,20 @@ pub struct NftablesConfig {
 
 impl NftablesConfig {
     pub fn configure(&self, path: &Path, ip_stack: IpStack, rules: &HashMap<String, Rule>) -> Result<()> {
-        let mut temp_path = path.to_owned();
-        if !temp_path.add_extension("new") {
-            return Err!("invalid output file path");
-        }
+        util::write_config(path, |temp_path: &Path, file: &mut dyn Write| {
+            for (name, set) in &self.sets {
+                set.generate(&name, ip_stack, rules, file)?;
+            }
+            file.flush()?;
 
-        debug!("Writing {temp_path:?}...");
+            util::run(
+                Command::new("nft")
+                    .arg("--check")
+                    .arg("--file").arg(temp_path)
+            )
+        })?;
 
-        let mut file = BufWriter::new(OpenOptions::new()
-            .create(true)
-            .mode(0o644)
-            .write(true)
-            .truncate(true)
-            .custom_flags(libc::O_NOFOLLOW)
-            .open(&temp_path)?);
-
-        for (name, set) in &self.sets {
-            set.generate(&name, ip_stack, rules, &mut file)?;
-        }
-
-        file.flush()?;
-        nft(&temp_path, true)?;
-
-        fs::rename(&temp_path, path).with_context(|| format!(
-            "rename {temp_path:?} to {path:?}"))?;
-        debug!("Wrote {path:?}.");
-
-        nft(path, false)
+        util::run(Command::new("nft").arg("--file").arg(path))
     }
 }
 
@@ -67,20 +51,13 @@ struct NftablesIpSet {
 
 impl NftablesIpSet {
     fn validate(sets: &BTreeMap<String, NftablesIpSet>) -> Result<(), ValidationError> {
-        static NAME_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-            r"^[a-z]+(?:_[a-z]+)*$").unwrap());
-
         for name in sets.keys() {
-            if !NAME_RE.is_match(name) {
-                return Err(ValidationError::new("invalid IP set name").with_message(format!(
-                    "invalid IP set name: {name:?} (must match `{}`)", NAME_RE.as_str()).into()));
-            }
+            validate_set_name(name)?;
         }
-
         Ok(())
     }
 
-    fn generate(&self, name: &str, ip_stack: IpStack, rules: &HashMap<String, Rule>, file: &mut BufWriter<File>) -> Result<()> {
+    fn generate(&self, name: &str, ip_stack: IpStack, rules: &HashMap<String, Rule>, file: &mut dyn Write) -> Result<()> {
         let rule = rules::get(rules, &self.rules)?;
 
         let sources = [
@@ -142,11 +119,14 @@ impl NftablesIpSet {
     }
 }
 
-fn nft(path: &Path, check: bool) -> Result<()> {
-    let mut command = Command::new("nft");
-    if check {
-        command.arg("--check");
+pub fn validate_set_name(name: &str) -> Result<(), ValidationError> {
+    static NAME_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+        r"^[a-z]+(?:_[a-z]+)*$").unwrap());
+
+    if !NAME_RE.is_match(name) {
+        return Err(ValidationError::new("invalid IP set name").with_message(format!(
+            "invalid IP set name: {name:?} (must match `{}`)", NAME_RE.as_str()).into()));
     }
-    command.arg("--file").arg(path);
-    util::run(command)
+
+    Ok(())
 }

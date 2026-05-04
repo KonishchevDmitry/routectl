@@ -1,3 +1,7 @@
+use std::fs::{self, OpenOptions};
+use std::io::{BufWriter, Write};
+use std::os::unix::fs::OpenOptionsExt;
+use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
@@ -43,7 +47,35 @@ pub fn format_multiline(text: &str) -> String {
     }
 }
 
-pub fn run(mut command: Command) -> Result<()> {
+pub fn write_config<W>(path: &Path, writer: W) -> Result<()>
+    where W: Fn(&Path, &mut dyn Write) -> Result<()>
+{
+    let mut temp_path = path.to_owned();
+    if !temp_path.add_extension("new") {
+        return Err!("invalid output file path");
+    }
+
+    debug!("Writing {temp_path:?}...");
+
+    let mut file = BufWriter::new(OpenOptions::new()
+        .create(true)
+        .mode(0o644)
+        .write(true)
+        .truncate(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&temp_path)?);
+
+    writer(&temp_path, &mut file)?;
+    file.flush()?;
+
+    fs::rename(&temp_path, path).with_context(|| format!(
+        "rename {temp_path:?} to {path:?}"))?;
+    debug!("Wrote {path:?}.");
+
+    Ok(())
+}
+
+pub fn run(command: &mut Command) -> Result<()> {
     debug!("Running `{command:?}`...");
 
     let result = command.output().with_context(|| format!(
