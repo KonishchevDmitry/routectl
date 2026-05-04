@@ -102,7 +102,7 @@ pub struct Rule {
 pub async fn resolve(config: &Config) -> Result<HashMap<String, Rule>> {
     let resolver = &Resolver::new(&config.resolver)?;
 
-    Ok(stream::iter(&config.rules)
+    stream::iter(&config.rules)
         .map(|(name, spec)| {
             async move {
                 spec.resolve(name, config.ip_stack, resolver).await
@@ -112,7 +112,7 @@ pub async fn resolve(config: &Config) -> Result<HashMap<String, Rule>> {
         })
         .buffer_unordered(usize::MAX)
         .try_collect()
-        .await?)
+        .await
 }
 
 pub fn get<'a>(rules: &'a HashMap<String, Rule>, names: &[String]) -> Result<&'a Rule> {

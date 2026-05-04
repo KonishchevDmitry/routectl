@@ -1,5 +1,5 @@
 use std::error;
-use std::io::{self, ErrorKind};
+use std::io;
 use std::time::Instant;
 
 use anyhow::{Context, Result, anyhow};
@@ -48,7 +48,7 @@ impl ListsResolver {
         }
 
         let mut lines = StreamReader::new(response.bytes_stream().map(|result| {
-            result.map_err(|e| io::Error::new(ErrorKind::Other, humanize_reqwest_error(e)))
+            result.map_err(|e| io::Error::other(humanize_reqwest_error(e)))
         })).lines();
 
         let mut is_empty = true;

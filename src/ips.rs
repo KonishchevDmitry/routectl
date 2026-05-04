@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::sources::{IpSource, IpSources, IpSourceType, IpSourceList, IpSourceListRef};
 
 // https://en.wikipedia.org/wiki/List_of_reserved_IP_addresses
-static RESERVED_NETWORKS: &'static [&'static str] = &[
+static RESERVED_NETWORKS: &[&str] = &[
     "0.0.0.0/8",       // [Software] This host on this network
     "10.0.0.0/8",      // [Private network] Used for local communications within a private network
     "100.64.0.0/10",   // [Private network] Shared address space for communications between a service provider and its subscribers when using a carrier-grade NAT
@@ -64,11 +64,10 @@ impl IpVersion {
     }
 
     pub fn matches(self, network: IpNet) -> bool {
-        match (self, network) {
-            (IpVersion::V4, IpNet::V4(_)) => true,
-            (IpVersion::V6, IpNet::V6(_)) => true,
-            _ => false,
-        }
+        matches!(
+            (self, network),
+            (IpVersion::V4, IpNet::V4(_)) | (IpVersion::V6, IpNet::V6(_))
+        )
     }
 }
 
@@ -85,12 +84,10 @@ pub enum IpStack {
 
 impl IpStack {
     pub fn matches(self, network: IpNet) -> bool {
-        match (self, network) {
-            (IpStack::V4, IpNet::V4(_)) => true,
-            (IpStack::V6, IpNet::V6(_)) => true,
-            (IpStack::Dual, _) => true,
-            _ => false,
-        }
+        matches!(
+            (self, network),
+            (IpStack::V4, IpNet::V4(_)) | (IpStack::V6, IpNet::V6(_)) | (IpStack::Dual, _),
+        )
     }
 }
 
