@@ -11,5 +11,10 @@ pub fn configure(config: &Config) -> Result<()> {
             "configure {path:?}"))?;
     }
 
+    for (path, dnsmasq) in &config.dnsmasq {
+        dnsmasq.configure(path, config.ip_stack, &rules).with_context(|| format!(
+            "configure {path:?}"))?;
+    }
+
     Ok(())
 }

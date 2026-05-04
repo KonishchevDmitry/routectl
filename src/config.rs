@@ -7,6 +7,7 @@ use serde::Deserialize;
 use validator::Validate;
 
 use crate::ips::IpStack;
+use crate::outputs::dnsmasq::DnsmasqConfig;
 use crate::outputs::nftables::NftablesConfig;
 use crate::resolving::ResolverConfig;
 use crate::rules::RuleConfig;
@@ -20,6 +21,10 @@ pub struct Config {
 
     #[validate(length(min = 1), custom(function = "RuleConfig::validate"), nested)]
     pub rules: BTreeMap<String, RuleConfig>,
+
+    #[validate(nested)]
+    #[serde(default)]
+    pub dnsmasq: BTreeMap<PathBuf, DnsmasqConfig>,
 
     #[validate(nested)]
     #[serde(default)]

@@ -30,3 +30,10 @@ nftables:
       test:
         rules: [test]
         with_exclude: true
+
+dnsmasq:
+  dnsmasq.conf:
+    domains:
+    - rules: [test]
+      server: 127.0.0.1:53
+      nftset: test
