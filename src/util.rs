@@ -1,5 +1,5 @@
 use std::fs::{self, OpenOptions};
-use std::io::{BufWriter, Write};
+use std::io::{ErrorKind, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::process::Command;
@@ -47,9 +47,26 @@ pub fn format_multiline(text: &str) -> String {
     }
 }
 
-pub fn write_config<W>(path: &Path, writer: W) -> Result<()>
-    where W: Fn(&Path, &mut dyn Write) -> Result<()>
+pub fn write_config<G, C, A>(path: &Path, generate: G, check: C, apply: A) -> Result<()>
+    where
+        G: Fn(&mut dyn Write) -> Result<()>,
+        C: Fn(&Path) -> Result<()>,
+        A: Fn() -> Result<()>,
 {
+    let mut data: Vec<u8> = Vec::new();
+    generate(&mut data)?;
+
+    let up_to_date = match fs::read(path) {
+        Ok(current) => data == current,
+        Err(err) if err.kind() == ErrorKind::NotFound => false,
+        Err(err) => return Err(err.into()),
+    };
+
+    if up_to_date {
+        debug!("Don't write {path:?} - it's already up-to-date.");
+        return Ok(());
+    }
+
     let mut temp_path = path.to_owned();
     if !temp_path.add_extension("new") {
         return Err!("invalid output file path");
@@ -57,22 +74,26 @@ pub fn write_config<W>(path: &Path, writer: W) -> Result<()>
 
     debug!("Writing {temp_path:?}...");
 
-    let mut file = BufWriter::new(OpenOptions::new()
+    let mut file = OpenOptions::new()
         .create(true)
         .mode(0o644)
         .write(true)
         .truncate(true)
         .custom_flags(libc::O_NOFOLLOW)
-        .open(&temp_path)?);
+        .open(&temp_path)?;
 
-    writer(&temp_path, &mut file)?;
+    file.write_all(&data)?;
     file.flush()?;
+    check(&temp_path)?;
 
     fs::rename(&temp_path, path).with_context(|| format!(
         "rename {temp_path:?} to {path:?}"))?;
     debug!("Wrote {path:?}.");
 
-    Ok(())
+    apply().inspect_err(|_| {
+        // Modify the file contents to trigger apply on next run
+        let _ = file.write_all(b"\n");
+    })
 }
 
 pub fn run(command: &mut Command) -> Result<()> {

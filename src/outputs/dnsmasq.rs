@@ -7,6 +7,7 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::Result;
+use log::info;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -23,24 +24,26 @@ pub struct DnsmasqConfig {
 
 impl DnsmasqConfig {
     pub fn configure(&self, path: &Path, ip_stack: IpStack, rules: &HashMap<String, Rule>) -> Result<()> {
-        util::write_config(path, |temp_path: &Path, file: &mut dyn Write| {
+        let generate = |file: &mut dyn Write| {
             for set in &self.domains {
                 set.generate(ip_stack, rules, file)?;
             }
-            file.flush()?;
+            Ok(())
+        };
 
-            util::run(
-                Command::new("dnsmasq")
-                    .arg("--test")
-                    .arg("-C").arg(temp_path)
-            )
-        })?;
+        let check = |temp_path: &Path| util::run(
+            Command::new("dnsmasq")
+                .arg("--test")
+                .arg("-C").arg(temp_path)
+        );
 
-        // FIXME(konishchev): Implement
-        // if reload:
-        //     sh.systemctl("try-restart", "--no-block", "dnsmasq.service", _defer=False)
+        let apply = || {
+            let unit_name = "dnsmasq.service";
+            info!("{path:?} has changed. Restarting {unit_name}...");
+            util::run(Command::new("systemctl").args(["try-restart", "--no-block", &unit_name]))
+        };
 
-        Ok(())
+        util::write_config(path, generate, check, apply)
     }
 }
 

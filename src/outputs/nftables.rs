@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 
 use anyhow::Result;
 use dedent::dedent;
+use log::info;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
@@ -23,20 +24,25 @@ pub struct NftablesConfig {
 
 impl NftablesConfig {
     pub fn configure(&self, path: &Path, ip_stack: IpStack, rules: &HashMap<String, Rule>) -> Result<()> {
-        util::write_config(path, |temp_path: &Path, file: &mut dyn Write| {
+        let generate = |file: &mut dyn Write| {
             for (name, set) in &self.sets {
                 set.generate(name, ip_stack, rules, file)?;
             }
-            file.flush()?;
+            Ok(())
+        };
 
-            util::run(
-                Command::new("nft")
-                    .arg("--check")
-                    .arg("--file").arg(temp_path)
-            )
-        })?;
+        let check = |temp_path: &Path| util::run(
+            Command::new("nft")
+                .arg("--check")
+                .arg("--file").arg(temp_path)
+        );
 
-        util::run(Command::new("nft").arg("--file").arg(path))
+        let apply = || {
+            info!("{path:?} has changed. Applying nftables rules...");
+            util::run(Command::new("nft").arg("--file").arg(path))
+        };
+
+        util::write_config(path, generate, check, apply)
     }
 }
 
