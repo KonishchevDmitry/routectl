@@ -112,11 +112,13 @@ pub struct Resolver {
 }
 
 impl Resolver {
-    pub fn new(config: &ResolverConfig) -> Result<Self> {
-        // FIXME(konishchev): Add owned networks
-        // FIXME(konishchev): Must be also added to ipset to secure dnsmasq resolving
-        let special_networks = ips::reserved_networks().context(
+    pub fn new(config: &ResolverConfig, owned_networks: &Networks) -> Result<Self> {
+        let reserved_networks = ips::reserved_networks().context(
             "failed to get a list of reserved networks")?;
+
+        // FIXME(konishchev): Must be also added to ipset to secure dnsmasq resolving
+        let mut special_networks = reserved_networks;
+        special_networks.extend(owned_networks);
 
         Ok(Self {
             concurrency: config.concurrency,

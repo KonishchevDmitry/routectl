@@ -100,7 +100,7 @@ pub struct Rule {
 
 #[tokio::main]
 pub async fn resolve(config: &Config) -> Result<HashMap<String, Rule>> {
-    let resolver = &Resolver::new(&config.resolver)?;
+    let resolver = &Resolver::new(&config.resolver, &config.owned_networks)?;
 
     stream::iter(&config.rules)
         .map(|(name, spec)| {

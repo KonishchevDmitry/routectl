@@ -8,6 +8,7 @@ use iprange::{IpNet as IpNetTrait, IpRange};
 use itertools::Itertools;
 use log::warn;
 use serde::{Deserialize, Serialize};
+use serde::de::{Deserializer, Error as _};
 
 use crate::sources::{IpSource, IpSources, IpSourceType, IpSourceList, IpSourceListRef};
 
@@ -108,6 +109,7 @@ impl IntoIterator for IpStack {
     }
 }
 
+#[derive(Default, Clone)]
 pub struct Networks {
     // We might pack IPv4 into IPv6 using IPv4-mapped addresses and don't manage these split IP sets, but not sure that
     // it's good idea in terms of code readability.
@@ -117,21 +119,43 @@ pub struct Networks {
 
 impl Networks {
     pub fn new() -> Self {
-        Self {
-            v4: BTreeMap::new(),
-            v6: BTreeMap::new(),
+        Default::default()
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D, source_list: IpSourceListRef) -> Result<Networks, D::Error>
+        where D: Deserializer<'de>
+    {
+        let values: Vec<String> = Deserialize::deserialize(deserializer)?;
+        let mut networks = Networks::new();
+
+        for value in &values {
+            let mut valid = false;
+
+            for value in value.split_ascii_whitespace() {
+                let network = parse_network(value).ok_or_else(|| D::Error::custom(format!(
+                    "invalid network: {value:?}")))?;
+                valid = true;
+
+                let source = IpSource::new(IpSourceType::Network(network), source_list.clone());
+                networks.add(network, source);
+            }
+
+            if !valid {
+                return Err(D::Error::custom(format!("invalid network: {value:?}")));
+            }
         }
+
+        Ok(networks)
     }
 
     pub fn add(&mut self, network: IpNet, source: IpSource) {
-        match network {
-            IpNet::V4(network) => Self::add_inner(&mut self.v4, network, source),
-            IpNet::V6(network) => Self::add_inner(&mut self.v6, network, source),
-        }
+        self.add_inner(network, &[source]);
     }
 
-    fn add_inner<N: IpNetTrait>(networks: &mut BTreeMap<N, IpSources>, network: N, source: IpSource) {
-        networks.entry(network).or_default().add(source);
+    pub fn extend(&mut self, other: &Networks) {
+        for (network, sources) in other {
+            self.add_inner(network, sources);
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -150,6 +174,22 @@ impl Networks {
             v4: filter_networks(context, &self.v4, &excludes.v4),
             v6: filter_networks(context, &self.v6, &excludes.v6),
         }
+    }
+
+    fn add_inner<'a, S>(&mut self, network: IpNet, sources: S)
+        where S: IntoIterator<Item = &'a IpSource>
+    {
+        match network {
+            IpNet::V4(network) => Self::add_into(&mut self.v4, network, sources),
+            IpNet::V6(network) => Self::add_into(&mut self.v6, network, sources),
+        }
+    }
+
+    fn add_into<'a, N, S>(networks: &mut BTreeMap<N, IpSources>, network: N, sources: S)
+        where N: IpNetTrait,
+              S: IntoIterator<Item = &'a IpSource>,
+    {
+        networks.entry(network).or_default().extend(sources);
     }
 }
 

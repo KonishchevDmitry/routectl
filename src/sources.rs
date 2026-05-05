@@ -1,4 +1,5 @@
 use std::fmt::{self, Display, Formatter};
+use std::slice;
 use std::sync::Arc;
 
 use ipnet::IpNet;
@@ -9,7 +10,7 @@ use crate::resolving::AS_PREFIX;
 
 pub use hickory_resolver::proto::rr::Name as Domain;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct IpSource {
     type_: IpSourceType,
     list: IpSourceListRef,
@@ -40,7 +41,7 @@ impl Display for IpSource {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum IpSourceType {
     Domain(Arc<Domain>),
     Network(IpNet),
@@ -55,6 +56,7 @@ impl Display for IpSourceType {
     }
 }
 
+#[derive(PartialEq)]
 pub enum IpSourceList {
     As(u32),
     List(Url),
@@ -64,7 +66,7 @@ pub enum IpSourceList {
 
 pub type IpSourceListRef = Arc<IpSourceList>;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct IpSources {
     sources: Vec<IpSource>,
 }
@@ -74,8 +76,23 @@ impl IpSources {
         self.sources.push(source);
     }
 
-    pub fn extend(&mut self, other: &IpSources) {
-        self.sources.extend(other.sources.iter().cloned());
+    pub fn extend<'a, S>(&mut self, other: S)
+        where S: IntoIterator<Item = &'a IpSource>
+    {
+        for source in other {
+            if !self.sources.contains(source) {
+                self.sources.push(source.clone());
+            }
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a IpSources {
+    type Item = &'a IpSource;
+    type IntoIter = slice::Iter<'a, IpSource>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.sources.iter()
     }
 }
 

@@ -3,18 +3,23 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use validator::Validate;
 
-use crate::ips::IpStack;
+use crate::ips::{IpStack, Networks};
 use crate::outputs::dnsmasq::DnsmasqConfig;
 use crate::outputs::nftables::NftablesConfig;
 use crate::resolving::ResolverConfig;
 use crate::rules::RuleConfig;
+use crate::sources::{IpSourceList, IpSourceListRef};
 
 #[derive(Deserialize, Validate)]
 pub struct Config {
     pub ip_stack: IpStack,
+
+    #[serde(deserialize_with = "deserialize_owned_networks")]
+    #[serde(default)]
+    pub owned_networks: Networks,
 
     #[validate(nested)]
     pub resolver: ResolverConfig,
@@ -40,4 +45,11 @@ impl Config {
 
         Ok(config)
     }
+}
+
+fn deserialize_owned_networks<'de, D>(deserializer: D) -> Result<Networks, D::Error>
+    where D: Deserializer<'de>
+{
+    let source_list = IpSourceListRef::new(IpSourceList::Special("owned"));
+    Networks::deserialize(deserializer, source_list)
 }

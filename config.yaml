@@ -1,5 +1,8 @@
 ip_stack: dual
 
+owned_networks:
+- 8.8.8.8
+
 resolver:
   concurrency: 2
   retry:
@@ -15,10 +18,9 @@ rules:
     - 1.1.1.0/24
     - 2.2.2.2
     - 3.3.3.0/24
-    - konishchev.ru *.konishchev.ru
-    # - мвд.рф
-    # - AS1273
-    # - https://core.telegram.org/resources/cidr.txt
+    - dns.google *.dns.google
+    - мвд.рф
+    # - AS1273 https://core.telegram.org/resources/cidr.txt
 
     exclude:
     - 3.3.3.3/25
