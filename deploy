@@ -18,4 +18,9 @@ rustup target add "$target"
 )
 
 scp "target/$target/release/$project" "$host:$install_path"
-ssh -t "$host" -- "$install_path" configure
+ssh -t "$host" -- "
+    # To not hit service restart limits after multiple reconfigurations
+    systemctl --quiet is-active dnsmasq.service && systemctl reset-failed dnsmasq.service
+
+    '$install_path' configure
+"
