@@ -1,3 +1,12 @@
+// The following dnsmasq limitations must be taken into account:
+// * A domain mustn't appear in multiple `nftset` directives. So if you need to resolve a domain into multiple nftables
+//   sets, it must be done in a single `nftset` directive (dnsmasq doesn't complain on multiple directives, but will use
+//   only the first one). The same with `server` directive, but contrary to `nftset` directive, for `server` directive
+//   this behavior is more intuitive.
+// * The docs say that `server` directive supports wildcard domain specification, but `nftset` directive doesn't support
+//   it, so we use simple domain specification for both directives for consistency.
+
+use std::borrow::Cow;
 use std::collections::{HashMap, hash_map::Entry};
 use std::fmt::{Arguments, Write as _};
 use std::io::Write;
@@ -14,7 +23,7 @@ use validator::Validate;
 use crate::ips::IpStack;
 use crate::outputs::nftables;
 use crate::rules::{self, Rule};
-use crate::sources::Domain;
+use crate::sources::{self, Domain};
 use crate::util;
 
 #[derive(Deserialize, Serialize, Validate)]
@@ -47,8 +56,8 @@ impl DnsmasqConfig {
 
 
 struct Dnsmasq<'a> {
-    servers: HashMap<&'a Domain, SocketAddr>,
-    nftsets: HashMap<&'a Domain, Rc<str>>,
+    servers: HashMap<Cow<'a, Domain>, SocketAddr>,
+    nftsets: HashMap<Cow<'a, Domain>, Rc<str>>,
 }
 
 impl<'a> Dnsmasq<'a> {
@@ -80,15 +89,17 @@ impl<'a> Dnsmasq<'a> {
         let mut writer = ConfigWriter::new(file, "server=/", &server_spec);
 
         for domain in &rule.target_domains {
+            let domain = sources::trim_wildcard(domain);
+
             match self.servers.entry(domain) {
                 Entry::Vacant(entry) => {
-                    // dnsmasq supports wildcard domain specification, so don't handle it specially
+                    let domain = entry.key();
                     writer.write(format_args!("{domain}/"))?;
                     entry.insert(server);
                 },
                 Entry::Occupied(entry) => {
-                    let existing = *entry.get();
-                    if server != existing {
+                    let domain = entry.key();
+                    if let existing = *entry.get() && server != existing {
                         return Err!("conflicting upstream server configuration for {domain}: {existing} and {server}");
                     }
                 },
@@ -125,15 +136,17 @@ impl<'a> Dnsmasq<'a> {
             let mut writer = ConfigWriter::new(file, "nftset=/", &spec);
 
             for domain in domains {
+                let domain = sources::trim_wildcard(domain);
+
                 match self.nftsets.entry(domain) {
                     Entry::Vacant(entry) => {
-                        // dnsmasq supports wildcard domain specification, so don't handle it specially
+                        let domain = entry.key();
                         writer.write(format_args!("{domain}/"))?;
                         entry.insert(spec.clone());
                     },
                     Entry::Occupied(entry) => {
-                        let existing = entry.get();
-                        if spec != *existing {
+                        let domain = entry.key();
+                        if let existing = entry.get() && spec != *existing {
                             return Err!("conflicting nftset configuration for {domain}: {existing} and {spec}");
                         }
                     },

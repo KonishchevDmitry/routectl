@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::slice;
 use std::sync::Arc;
@@ -135,6 +136,16 @@ pub fn parse_domain(domain: &str) -> Option<Domain> {
     Some(domain)
 }
 
+pub fn trim_wildcard(domain: &Domain) -> Cow<'_, Domain> {
+    if domain.is_wildcard() {
+        let mut domain = domain.base_name();
+        domain.set_fqdn(false); // A side effect of base_name()
+        Cow::Owned(domain)
+    } else {
+        Cow::Borrowed(domain)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -160,6 +171,16 @@ mod tests {
     fn domain_parsing(domain: &str, expected: Option<&str>) {
         let result = parse_domain(domain).map(|domain| domain.to_string());
         let expected = expected.map(ToOwned::to_owned);
+        assert_eq!(result, expected, "{domain}");
+    }
+
+    #[rstest(domain, expected,
+        case("c.b.a",  "c.b.a"),
+        case("*.b.a",    "b.a"),
+    )]
+    fn wildcard_trimming(domain: &str, expected: &str) {
+        let domain = parse_domain(domain).unwrap();
+        let result = trim_wildcard(&domain).to_string();
         assert_eq!(result, expected, "{domain}");
     }
 }
