@@ -1,3 +1,9 @@
+// The following nftables limitations must be taken into account:
+// * You can't do a positive matching against multiple sets in a single rule: `ip daddr {@set1, @set2}` is not supported
+//   and nftables has no `or` statement. So you have to either manually combine several sets into a one huge set, or
+//   match them via multiple rules.
+// * All networks in IP set mustn't intersect with each other, so networks must be compacted before IP set generation.
+
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 use std::path::Path;
@@ -82,8 +88,8 @@ impl NftablesIpSet {
                 let nft_name = format!("{name}{name_suffix}_ipv{version}", version=ip_version.version());
 
                 let (nft_type, max_width, networks) = match ip_version {
-                    IpVersion::V4 => ("ip",  18, networks.iter(ip_version)),
-                    IpVersion::V6 => ("ip6", 43, networks.iter(ip_version)),
+                    IpVersion::V4 => ("ip",  18, networks.iter_compacted(ip_version)),
+                    IpVersion::V6 => ("ip6", 43, networks.iter_compacted(ip_version)),
                 };
 
                 if first_set {

@@ -169,6 +169,13 @@ impl Networks {
         }
     }
 
+    pub fn iter_compacted(&self, version: IpVersion) -> Box<dyn Iterator<Item = (IpNet, IpSources)>> {
+        match version {
+            IpVersion::V4 => Box::new(compact_networks(&self.v4).into_iter().map(|(network, sources)| (IpNet::V4(network), sources))),
+            IpVersion::V6 => Box::new(compact_networks(&self.v6).into_iter().map(|(network, sources)| (IpNet::V6(network), sources))),
+        }
+    }
+
     pub fn filter(self, context: &str, excludes: &Networks) -> Networks {
         Networks {
             v4: filter_networks(context, &self.v4, &excludes.v4),
@@ -312,4 +319,32 @@ fn filter_network<Network, NetworkSource>(
     }
 
     range
+}
+
+fn compact_networks<N: IpNetTrait>(networks: &BTreeMap<N, IpSources>) -> BTreeMap<N, IpSources> {
+    let mut orig_ranges = Vec::new();
+    let mut result_ranges = IpRange::new();
+
+    for (&network, sources) in networks {
+        let mut range = IpRange::new();
+        range.add(network);
+
+        orig_ranges.push((range, sources));
+        result_ranges.add(network);
+    }
+
+    result_ranges.simplify();
+    result_ranges.iter().map(|network| {
+        let mut result_range = IpRange::new();
+        result_range.add(network);
+
+        let mut sources = IpSources::new();
+        for (orig_range, orig_sources) in &orig_ranges {
+            if !result_range.intersect(orig_range).is_empty() {
+                sources.extend(*orig_sources);
+            }
+        }
+
+        (network, sources)
+    }).collect()
 }

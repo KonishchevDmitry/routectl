@@ -72,6 +72,10 @@ pub struct IpSources {
 }
 
 impl IpSources {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn add(&mut self, source: IpSource) {
         self.sources.push(source);
     }
