@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
 use crate::config::Config;
-use crate::ips::{HumanNetwork, IpStack, Networks};
+use crate::ips::{self, HumanNetwork, IpStack, Networks};
 use crate::resolving::{Resolver, Target};
 use crate::sources::Domain;
 
@@ -43,7 +43,7 @@ impl RuleConfig {
 
     // FIXME(konishchev): Compact the network lists
     // FIXME(konishchev): Do we need to calculate domains intersection?
-    async fn resolve(&self, name: &str, global_ip_stack: IpStack, resolver: &Resolver) -> Result<Rule> {
+    async fn resolve<'a>(&self, name: &str, global_ip_stack: IpStack, resolver: &Resolver<'a>) -> Result<Rule> {
         let ip_stack = self.ip_stack.unwrap_or(global_ip_stack);
 
         let (
@@ -100,9 +100,13 @@ pub struct Rule {
 
 #[tokio::main]
 pub async fn resolve(config: &Config) -> Result<HashMap<String, Rule>> {
-    let resolver = &Resolver::new(&config.resolver, &config.owned_networks)?;
+    let mut special_networks = ips::reserved_networks().context(
+        "failed to get a list of reserved networks")?;
+    special_networks.extend(&config.owned_networks);
 
-    stream::iter(&config.rules)
+    let resolver = &Resolver::new(&config.resolver, &special_networks)?;
+
+    let mut rules: HashMap<String, Rule> = stream::iter(&config.rules)
         .map(|(name, spec)| {
             async move {
                 spec.resolve(name, config.ip_stack, resolver).await
@@ -112,7 +116,17 @@ pub async fn resolve(config: &Config) -> Result<HashMap<String, Rule>> {
         })
         .buffer_unordered(usize::MAX)
         .try_collect()
-        .await
+        .await?;
+
+    rules.insert("$special".to_owned(), Rule {
+        target_domains: BTreeSet::new(),
+        exclude_domains: BTreeSet::new(),
+
+        target_networks: special_networks,
+        exclude_networks: Networks::new(),
+    });
+
+    Ok(rules)
 }
 
 pub fn get<'a>(rules: &'a HashMap<String, Rule>, names: &[String]) -> Result<&'a Rule> {

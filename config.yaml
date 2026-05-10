@@ -1,30 +1,25 @@
 ip_stack: dual
 
 owned_networks:
-- 8.8.8.8
+  - 8.8.8.8
 
 resolver:
   concurrency: 2
-  retry:
-    # min_delay: 1s
-    # max_delay: 1m
-    # max_times: 3
-    # max_total_delay: 3m
 
 rules:
   test:
     targets:
-    - 1.1.1.1
-    - 1.1.1.0/24
-    - 2.2.2.2
-    - 3.3.3.0/24
-    - dns.google *.dns.google
-    - мвд.рф
-    # - AS1273 https://core.telegram.org/resources/cidr.txt
+      - 1.1.1.0/24
+      - 2.2.2.2
+      - 3.3.3.0/24
+      - test.localhost
+      - one.one.one.one
+      - dns.google *.dns.google
+      - мвд.рф
+      # - AS1273 https://core.telegram.org/resources/cidr.txt
 
     exclude:
-    - 3.3.3.3/25
-    - 3.3.3.255
+    - 3.3.3.3
 
 nftables:
   test.nft:
@@ -33,9 +28,12 @@ nftables:
         rules: [test]
         with_exclude: true
 
+      special:
+        rules: [$special]
+
 dnsmasq:
   dnsmasq.conf:
     domains:
-    - rules: [test]
-      server: 127.0.0.1:53
-      nftset: test
+      - rules: [test]
+        server: 127.0.0.1:53
+        nftset: test

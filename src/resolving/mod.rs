@@ -99,27 +99,20 @@ pub struct ResolverConfig {
     retry: RetryConfig,
 }
 
-pub struct Resolver {
+pub struct Resolver<'a> {
     concurrency: usize,
     semaphore: Semaphore,
     retry: RetryConfig,
 
-    special_networks: Networks,
+    special_networks: &'a Networks,
 
     r#as: AsResolver,
     dns: DnsResolver,
     lists: ListsResolver,
 }
 
-impl Resolver {
-    pub fn new(config: &ResolverConfig, owned_networks: &Networks) -> Result<Self> {
-        let reserved_networks = ips::reserved_networks().context(
-            "failed to get a list of reserved networks")?;
-
-        // FIXME(konishchev): Must be also added to ipset to secure dnsmasq resolving
-        let mut special_networks = reserved_networks;
-        special_networks.extend(owned_networks);
-
+impl<'a> Resolver<'a> {
+    pub fn new(config: &ResolverConfig, special_networks: &'a Networks) -> Result<Self> {
         Ok(Self {
             concurrency: config.concurrency,
             semaphore: Semaphore::new(config.concurrency),
@@ -195,7 +188,7 @@ impl Resolver {
 
                 for domain_ip in domain_ips {
                     // FIXME(konishchev): Should we somehow filter the whole domain here?
-                    for filtered_ip in ips::filter(context, domain_ip, &source, &self.special_networks) {
+                    for filtered_ip in ips::filter(context, domain_ip, &source, self.special_networks) {
                         result_networks.lock().unwrap().add(filtered_ip, source.clone());
                     }
                 }
@@ -265,7 +258,7 @@ impl Resolver {
     ) {
         for list_network in list_networks {
             let source = IpSource::new(IpSourceType::Network(list_network), source_list.clone());
-            for filtered_network in ips::filter(context, list_network, &source, &self.special_networks) {
+            for filtered_network in ips::filter(context, list_network, &source, self.special_networks) {
                 result.lock().unwrap().add(filtered_network, source.clone());
             }
         }
