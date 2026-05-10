@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+#
+# Deploys the tool to the server
+#
 
 set -eu
 cd "$(dirname "$(realpath "$0")")"
