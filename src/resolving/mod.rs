@@ -12,7 +12,7 @@ use anyhow::{Context, Result, anyhow};
 use backon::{ExponentialBuilder, Retryable};
 use futures::stream::{self, StreamExt, TryStreamExt};
 use ipnet::IpNet;
-use log::warn;
+use log::{debug, warn};
 use serde::{Deserialize, Serialize, Serializer};
 use serde::de::{Deserializer, Error as _};
 use tokio::sync::Semaphore;
@@ -208,7 +208,8 @@ impl<'a> Resolver<'a> {
 
             &Target::Network(network) => {
                 if !ip_stack.matches(network) {
-                    return Err!("{} doesn't belong to {ip_stack}", HumanNetwork(network));
+                    debug!("[{context}] Ignoring {} - it doesn't belong to {ip_stack}.", HumanNetwork(network));
+                    return Ok(());
                 }
 
                 let source_type = IpSourceType::Network(network);
