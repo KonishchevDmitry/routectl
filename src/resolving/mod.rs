@@ -183,14 +183,23 @@ impl<'a> Resolver<'a> {
                     return Err!("invalid domain: {domain}");
                 }
 
+                let mut has_special_ip = false;
                 let source_type = IpSourceType::Domain(Arc::new(domain.to_owned()));
                 let source = IpSource::new(source_type, manual_list.clone());
 
                 for domain_ip in domain_ips {
-                    // FIXME(konishchev): Should we somehow filter the whole domain here?
+                    let mut excluded = true;
+
                     for filtered_ip in ips::filter(context, domain_ip, &source, self.special_networks) {
                         result_networks.lock().unwrap().add(filtered_ip, source.clone());
+                        excluded = false;
                     }
+
+                    has_special_ip |= excluded;
+                }
+
+                if has_special_ip {
+                    return Err!("{domain} resolves to IP which intersect with special IP list");
                 }
 
                 result_domains.lock().unwrap().insert(domain.clone());

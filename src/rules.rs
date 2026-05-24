@@ -41,8 +41,6 @@ impl RuleConfig {
         Ok(())
     }
 
-    // FIXME(konishchev): Compact the network lists
-    // FIXME(konishchev): Do we need to calculate domains intersection?
     async fn resolve<'a>(&self, name: &str, global_ip_stack: IpStack, resolver: &Resolver<'a>) -> Result<Rule> {
         let ip_stack = self.ip_stack.unwrap_or(global_ip_stack);
 
@@ -54,6 +52,7 @@ impl RuleConfig {
             resolver.resolve(name, ip_stack, &self.exclude),
         )?;
 
+        // TODO(konishchev): We should do the same for domain lists
         let target_networks = target_networks.filter(name, &exclude_networks);
 
         if log_enabled!(Level::Debug) {

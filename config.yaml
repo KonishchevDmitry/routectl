@@ -1,7 +1,7 @@
 ip_stack: dual
 
-owned_networks:
-  - 8.8.8.8
+# owned_networks:
+#   - 8.8.8.8
 
 resolver:
   concurrency: 2
@@ -12,7 +12,7 @@ rules:
       - 1.1.1.0/24
       - 2.2.2.2
       - 3.3.3.0/24
-      - test.localhost
+      # - test.localhost
       - one.one.one.one
       - dns.google *.dns.google
       - мвд.рф
